@@ -1,0 +1,11 @@
+{
+  "name": "arc-workspaces",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "dependencies": {
+    "puppeteer": "^24.40.0"
+  }
+}
