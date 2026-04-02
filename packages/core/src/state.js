@@ -469,7 +469,24 @@ const state = {
     // COMPARE
     // ============================================================
 
-    setCompareImage(imageId) {
+    async setCompareImage(imageId) {
+        const project = this.getActiveProject();
+        const img = project?.images.find(x => x.id === imageId);
+        
+        if (img && this._storageType === 'fs' && !img.base64) {
+            try {
+                this.canvasLoading = true;
+                this.loadingText = 'Loading Compare Image...';
+                this.emit('loadingChanged');
+                img.base64 = await dataDB.getImageBase64(img.id);
+            } catch (err) {
+                console.error('Failed to load compare image:', err);
+            } finally {
+                this.canvasLoading = false;
+                this.emit('loadingChanged');
+            }
+        }
+        
         this.compareImageId = imageId;
         this.compareActive = true;
         this.wipePosition = 0.5;

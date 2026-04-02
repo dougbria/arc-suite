@@ -107,14 +107,22 @@ export class EntityEditor {
     renderEditor(container, item, type) {
         container.innerHTML = `
             <div style="margin-bottom:1rem; border-bottom:1px solid #333; padding-bottom:1rem;">
-                <h3 style="margin:0 0 1rem 0;">Edit ${type}: <input type="text" id="ee-name" value="${item.name || ''}" style="background:transparent; color:white; border:1px solid #444; padding:4px;" /></h3>
+                <h3 style="margin:0 0 1rem 0; display:flex; gap:1rem; align-items:center;">
+                    <span>Edit ${type}:</span>
+                    <input type="text" id="ee-name" value="${item.name || ''}" style="background:transparent; color:white; border:1px solid #444; padding:4px;" />
+                    <label style="font-size:0.8rem; font-weight:normal; display:flex; align-items:center; gap:0.25rem;">
+                        <input type="checkbox" id="ee-lock" ${item.isLocked ? 'checked' : ''} />
+                        Locked (Prevent Override)
+                    </label>
+                </h3>
                 <div>
                    <label>Description</label><br>
-                   <textarea id="ee-desc" style="width:100%; min-height:60px; background:#111; color:#ccc; border:1px solid #444; padding:4px;">${item.vgl?.description || ''}</textarea>
+                   <textarea id="ee-desc" style="width:100%; min-height:60px; background:#111; color:#ccc; border:1px solid #444; padding:4px;">${item.vgl?.description || item.vgl?.background_setting || ''}</textarea>
                 </div>
             </div>
             <div style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
                 <label>Master VGL Prompt</label>
+                <button id="ee-btn-generate" class="md-btn">✨ Generate VGL via LLM</button>
             </div>
             <div id="ee-vgl-container" style="border:1px solid #444; min-height:200px; padding:1rem; background:#1a1a1a; overflow-y:auto; max-height:400px;"></div>
         `;
@@ -122,20 +130,50 @@ export class EntityEditor {
         const nameInput = container.querySelector('#ee-name');
         nameInput.onchange = () => this._saveField(item, 'name', nameInput.value);
 
+        const lockInput = container.querySelector('#ee-lock');
+        lockInput.onchange = () => this._saveField(item, 'isLocked', lockInput.checked);
+
         const descInput = container.querySelector('#ee-desc');
         descInput.onchange = () => {
             if (!item.vgl) item.vgl = {};
-            this._saveField(item.vgl, 'description', descInput.value, item);
+            this._saveField(item.vgl, type === 'location' ? 'background_setting' : 'description', descInput.value, item);
         };
 
         const vglContainer = container.querySelector('#ee-vgl-container');
+        const generateBtn = container.querySelector('#ee-btn-generate');
+        let jsonEditorInstance = null;
+
+        generateBtn.onclick = async () => {
+            const currentDesc = descInput.value || '';
+            const currentName = nameInput.value || '';
+            if (!currentDesc) return alert("Please provide a description first.");
+            
+            generateBtn.textContent = 'Generating...';
+            generateBtn.disabled = true;
+            try {
+                const structuredData = await this.generateVGL(type, currentName, currentDesc);
+                if (structuredData) {
+                    if (!item.vgl) item.vgl = {};
+                    item.vgl.structured_prompt = JSON.stringify(structuredData, null, 2);
+                    this._saveField(item.vgl, type === 'location' ? 'background_setting' : 'description', currentDesc, item);
+                    if (jsonEditorInstance) jsonEditorInstance.setData(JsonEditor.transformStructuredPrompt(structuredData));
+                }
+            } catch (err) {
+                console.error("VGL Generation Failed:", err);
+                alert("Generation failed: " + err.message);
+            } finally {
+                generateBtn.textContent = '✨ Generate VGL via LLM';
+                generateBtn.disabled = false;
+            }
+        };
+
         let parsed = {};
         if (item.vgl?.structured_prompt) {
             try { parsed = JSON.parse(item.vgl.structured_prompt); } catch(e) { parsed = { raw: item.vgl.structured_prompt }; }
         }
 
         // Initialize the new Unified JSON Editor!
-        new JsonEditor.JsonEditor(vglContainer, {
+        jsonEditorInstance = new JsonEditor.JsonEditor(vglContainer, {
             readonly: false,
             onChange: (newData) => {
                 if (!item.vgl) item.vgl = {};
@@ -143,7 +181,8 @@ export class EntityEditor {
                 item.entityVersion = (item.entityVersion || 0) + 1;
                 this.state.saveWorkspace(); // auto-save
             }
-        }).setData(JsonEditor.transformStructuredPrompt(parsed));
+        });
+        jsonEditorInstance.setData(JsonEditor.transformStructuredPrompt(parsed));
     }
 
     _saveField(targetObj, field, value, rootEntity = null) {

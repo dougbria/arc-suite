@@ -315,8 +315,18 @@ const api = {
         if (seed !== null && typeof seed !== 'undefined' && seed > 0) body.seed = seed;
         if (options.structured_prompt) {
             let sp = options.structured_prompt;
-            // Bria /image/generate expects structured_prompt as a JSON *string*, not an object
-            if (typeof sp === 'object') {
+            if (typeof sp === 'string') {
+                try { sp = JSON.parse(sp); } catch(e) {}
+            }
+            if (typeof sp === 'object' && sp !== null) {
+                // Sanitize internal tags before dispatching to Bria
+                if (sp.objects && Array.isArray(sp.objects)) {
+                    sp.objects = sp.objects.map(obj => {
+                        const clone = { ...obj };
+                        delete clone._arc_character_id;
+                        return clone;
+                    });
+                }
                 sp = JSON.stringify(sp);
             }
             body.structured_prompt = sp;
@@ -444,6 +454,7 @@ const api = {
         return {
             base64,
             seed: data.result?.seed || null,
+            structured_prompt: data.result?.structured_instruction || data.result?.structured_prompt || null,
             imageUrl
         };
     },
@@ -546,7 +557,12 @@ const api = {
         if (!imageUrl) throw new Error('No image URL returned from Remove Background API.');
 
         const base64 = await fetchImageAsBase64(imageUrl);
-        return { base64, seed: data.result?.seed || null, imageUrl };
+        return { 
+            base64, 
+            seed: data.result?.seed || null, 
+            structured_prompt: data.result?.structured_instruction || data.result?.structured_prompt || null,
+            imageUrl 
+        };
     },
 
     /**
@@ -565,7 +581,12 @@ const api = {
         if (!imageUrl) throw new Error('No image URL returned from Erase By Text API.');
 
         const base64 = await fetchImageAsBase64(imageUrl);
-        return { base64, seed: data.result?.seed || null, imageUrl };
+        return { 
+            base64, 
+            seed: data.result?.seed || null, 
+            structured_prompt: data.result?.structured_instruction || data.result?.structured_prompt || null,
+            imageUrl 
+        };
     }
 };
 

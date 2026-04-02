@@ -459,7 +459,7 @@ function updateFeaturedImage() {
     elements.mainImage.src = img.base64;
     elements.infoSeed.textContent = `Seed: ${img.seed}`;
     if (elements.infoVersion) {
-        elements.infoVersion.textContent = img.version != null ? `v${img.version}` : '';
+        elements.infoVersion.textContent = img.version != null ? `v${String(img.version).padStart(3, '0')}` : '';
     }
     const displayPrompt = img.prompt ? (img.prompt.length > 200 ? img.prompt.substring(0, 200) + '...' : img.prompt) : '(no prompt)';
     elements.infoPrompt.textContent = displayPrompt;

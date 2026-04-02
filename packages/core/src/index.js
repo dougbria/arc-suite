@@ -7,6 +7,15 @@ export * as Canvas from './canvas.js';
 export * as State from './state.js';
 export * as JsonEditor from './json-editor.js';
 export { EntityEditor } from './plugins/EntityEditor.js';
+export { apiConsole } from './api-console.js';
+
+import api from './api.js';
+export { api };
+
+export * as Actions from './actions.js';
+export * as Compare from './compare.js';
+export * as Resizer from './resizer.js';
+export * as Utils from './utils.js';
 
 export class ArcCore {
     constructor() {

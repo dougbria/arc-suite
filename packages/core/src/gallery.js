@@ -148,7 +148,6 @@ function renderBatch(batch) {
          data-image-id="${img.id}">
       <img src="${img.thumbnail || img.base64}" alt="Generated image" loading="lazy" />
       <span class="thumb-seed">${img.isReference ? 'UPLOAD' : img.seed}</span>
-      ${img.version != null ? `<span class="thumb-version">v${img.version}</span>` : ''}
       <div class="thumb-actions">
         <button class="thumb-action-btn star-btn" title="${img.isStarred ? 'Unstar' : 'Star'} image">${img.isStarred ? '★' : '☆'}</button>
       </div>
@@ -158,12 +157,22 @@ function renderBatch(batch) {
     }).join('');
 
     const noteValue = batch.note || batch.prompt || '';
+    
+    let batchVersionStr = '';
+    if (batch.images.length > 0 && batch.images[0].version != null) {
+        const vNum = String(batch.images[0].version).padStart(3, '0');
+        const vSuf = batch.images[0].versionSuffix || '';
+        batchVersionStr = `<span class="batch-version" style="margin-left: 8px; color: var(--text-muted); font-size: 11px; font-weight: 500; font-family: monospace;">v${vNum}${vSuf}</span>`;
+    }
 
     return `
     <div class="batch-group" data-batch-id="${batch.batchId}">
       <div class="batch-header">
         <div class="batch-top">
-            <div class="batch-mode-badge ${batch.mode || 'generate'}">${(batch.mode || 'generate').toUpperCase()}</div>
+            <div style="display: flex; align-items: center;">
+                <div class="batch-mode-badge ${batch.mode || 'generate'}">${(batch.mode || 'generate').toUpperCase()}</div>
+                ${batchVersionStr}
+            </div>
             <div class="batch-meta">
                 <span class="batch-time">${formatTime(batch.createdAt)}</span>
                 <button class="batch-delete-btn" title="Delete Group" data-batch-id="${batch.batchId}">✕</button>
@@ -189,14 +198,16 @@ function showContextMenu(e, imageId) {
 
     const img = state.getImage(imageId);
 
-    // Show/hide Jump to Parent
+    // Show/hide Jump to Parent and Top Parent
     const hasParent = !!(img && img.parentImageId && state.getImage(img.parentImageId));
-    ctxJumpParent?.classList.toggle('hidden', !hasParent);
+    document.getElementById('ctx-jump-parent')?.classList.toggle('hidden', !hasParent);
+    document.getElementById('ctx-jump-top-parent')?.classList.toggle('hidden', !hasParent);
 
     // Show/hide Jump to Child — find first direct derivative
     const project = state.getActiveProject();
-    const firstChild = project?.images.find(i => i.parentImageId === imageId);
-    ctxJumpChild?.classList.toggle('hidden', !firstChild);
+    const hasChild = project?.images.find(i => i.parentImageId === imageId);
+    document.getElementById('ctx-jump-first-child')?.classList.toggle('hidden', !hasChild);
+    document.getElementById('ctx-jump-latest-child')?.classList.toggle('hidden', !hasChild);
 
     contextMenu.classList.remove('hidden');
 
@@ -254,10 +265,38 @@ async function handleContextAction(e) {
             break;
         }
 
-        case 'jump-to-child': {
+        case 'jump-to-top-parent': {
             const project = state.getActiveProject();
-            const child = project?.images.find(i => i.parentImageId === contextImageId);
-            if (child) {
+            let current = img;
+            let topParentId = current?.id;
+            while (current?.parentImageId) {
+                current = project?.images.find(i => i.id === current.parentImageId);
+                if (current) topParentId = current.id;
+                else break;
+            }
+            if (topParentId && topParentId !== contextImageId) {
+                state.setFeaturedImage(topParentId);
+                scrollThumbnailIntoView(topParentId);
+            }
+            break;
+        }
+
+        case 'jump-to-first-child': {
+            const project = state.getActiveProject();
+            const children = project?.images.filter(i => i.parentImageId === contextImageId) || [];
+            if (children.length) {
+                const child = children[children.length - 1]; // Oldest child is at the end
+                state.setFeaturedImage(child.id);
+                scrollThumbnailIntoView(child.id);
+            }
+            break;
+        }
+
+        case 'jump-to-latest-child': {
+            const project = state.getActiveProject();
+            const children = project?.images.filter(i => i.parentImageId === contextImageId) || [];
+            if (children.length) {
+                const child = children[0]; // Newest child is at the beginning
                 state.setFeaturedImage(child.id);
                 scrollThumbnailIntoView(child.id);
             }

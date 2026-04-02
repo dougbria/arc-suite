@@ -155,6 +155,13 @@ export class DataService {
         return await this._listDirFiles(dir);
     }
 
+    async getCharacter(id) {
+        try {
+            const dir = await this._getDir(['entities', 'characters']);
+            return await this._readJson(dir, `${id}.json`);
+        } catch { return null; }
+    }
+
     // ---- Locations ----
     async saveLocation(location) {
         const dir = await this._getDir(['entities', 'locations']);
@@ -166,6 +173,13 @@ export class DataService {
     async listLocations() {
         const dir = await this._getDir(['entities', 'locations']);
         return await this._listDirFiles(dir);
+    }
+
+    async getLocation(id) {
+        try {
+            const dir = await this._getDir(['entities', 'locations']);
+            return await this._readJson(dir, `${id}.json`);
+        } catch { return null; }
     }
 
     // ---- Images ----

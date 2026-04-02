@@ -74,7 +74,7 @@ export async function removeBackground(imageId, options = {}) {
         const result = await api.removeBackground(img.base64, { signal: options.signal });
         const thumbnail = await createThumbnail(result.base64, 200);
         await state.addImage(
-            { ...result, thumbnail, structured_prompt: null },
+            { ...result, thumbnail, structured_prompt: result.structured_prompt || img.structured_prompt },
             'Removed Background',
             'edit',
             generateUUID(),
@@ -104,7 +104,7 @@ export async function eraseObject(imageId, objectDescription, options = {}) {
         const result = await api.eraseByText(img.base64, objectDescription, { signal: options.signal });
         const thumbnail = await createThumbnail(result.base64, 200);
         await state.addImage(
-            { ...result, thumbnail, structured_prompt: null },
+            { ...result, thumbnail, structured_prompt: result.structured_prompt || img.structured_prompt },
             `Erase object: ${objectDescription}`,
             'edit',
             generateUUID(),
