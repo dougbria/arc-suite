@@ -34,7 +34,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Monorepo Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Render App
         run: npm run build -w @arc/render
