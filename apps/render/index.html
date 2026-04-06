@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bria Arc</title>
+  <meta name="description" content="Bria Arc — AI Image Generation, Refinement & Editing Interface" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- ==================== STORAGE SETUP BANNER ==================== -->
+    <div id="storage-banner" class="storage-banner hidden">
+      <div class="storage-banner-inner">
+        <span class="storage-banner-icon">💾</span>
+        <div class="storage-banner-text">
+          <strong id="storage-banner-title">Set up persistent storage</strong>
+          <span id="storage-banner-desc">Choose a local folder to save your projects &amp; images across
+            sessions.</span>
+        </div>
+        <div class="storage-banner-actions">
+          <button id="storage-pick-btn" class="btn btn-primary btn-sm">Choose Folder</button>
+          <button id="storage-skip-btn" class="btn btn-sm">Use Browser Storage</button>
+        </div>
+        <button id="storage-banner-close" class="storage-banner-close" title="Dismiss">✕</button>
+      </div>
+    </div>
+
+    <!-- ==================== HEADER BAR ==================== -->
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="app-title">Bria<span class="title-accent">Arc</span></h1>
+      </div>
+      <div class="header-center">
+        <div class="project-selector">
+          <select id="project-select" title="Switch project">
+            <option value="">— No Project —</option>
+          </select>
+          <button id="new-project-btn" class="icon-btn" title="New Project">＋</button>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="delete-project-btn" class="icon-btn danger" title="Delete Project">✕</button>
+        <button id="storage-indicator-btn" class="storage-indicator-btn hidden" title="Change storage folder">
+          <span class="storage-indicator-icon">📁</span>
+          <span id="storage-indicator-name" class="storage-indicator-name"></span>
+        </button>
+        <button id="json-sidebar-header-toggle" class="icon-btn" title="Toggle VGL Inspector">VGL Inspector</button>
+      </div>
+    </header>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <main class="layout-horizontal">
+      <div id="arc-main-mount" style="flex:1; display:flex; flex-direction:row; min-width:0; position:relative; background:var(--bg-base);"></div>
+      <div class="resizer" id="resizer-gallery"></div>
+      <div id="arc-gallery-mount" style="height:100%; display:flex;"></div>
+      <div class="resizer" id="resizer-json"></div>
+      <div id="arc-vgl-mount" style="width: 300px;"></div>
+    </main>
+
+    
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="context-menu hidden">
+      <button data-action="compare">🔀 Compare</button>
+      <button data-action="jump-to-top-parent" id="ctx-jump-top-parent" class="hidden">⇈ Jump to Top Parent</button>
+      <button data-action="jump-to-parent" id="ctx-jump-parent" class="hidden">⬆ Jump to Parent</button>
+      <button data-action="jump-to-first-child" id="ctx-jump-first-child" class="hidden">⬇ Jump to First Child</button>
+      <button data-action="jump-to-latest-child" id="ctx-jump-latest-child" class="hidden">⇊ Jump to Latest Child</button>
+      <button data-action="star">⭐ Star / Unstar</button>
+      <hr />
+      <button data-action="enhance">✨ Creative Enhancer</button>
+      <div class="context-submenu-item">
+        <button class="context-submenu-trigger">📐 Increase Resolution ▶</button>
+        <div class="context-submenu">
+          <button data-action="increase-resolution" data-scale="2">2× Resolution</button>
+          <button data-action="increase-resolution" data-scale="4">4× Resolution</button>
+        </div>
+      </div>
+      <hr />
+      <button data-action="download-png">⬇ Download PNG</button>
+      <button data-action="download-sp">📄 Download VGL</button>
+      <button data-action="show-in-folder">📂 Show in Folder</button>
+      <hr />
+      <button data-action="copy-seed">📋 Copy Seed</button>
+      <button data-action="copy-prompt">📋 Copy Prompt</button>
+      <hr />
+      <button data-action="delete" class="danger-text">✕ Delete Image</button>
+    </div>
+
+    <!-- Canvas Context Menu (right-click on main image viewer) -->
+    <div id="canvas-context-menu" class="context-menu hidden">
+      <button data-canvas-action="enhance">✨ Creative Enhancer</button>
+      <div class="context-submenu-item">
+        <button class="context-submenu-trigger">📐 Increase Resolution ▶</button>
+        <div class="context-submenu">
+          <button data-canvas-action="increase-resolution" data-scale="2">2× Resolution</button>
+          <button data-canvas-action="increase-resolution" data-scale="4">4× Resolution</button>
+        </div>
+      </div>
+      <button data-canvas-action="remove-background">🪄 Remove Background</button>
+      <div class="context-submenu-item" id="canvas-ctx-erase-item">
+        <button class="context-submenu-trigger">🧹 Erase Object ▶</button>
+        <div class="context-submenu" id="canvas-ctx-erase-submenu">
+          <!-- Populated dynamically from VGL objects -->
+        </div>
+      </div>
+      <div class="context-submenu-item" id="canvas-ctx-copy-item">
+        <button class="context-submenu-trigger">📋 Copy Object ▶</button>
+        <div class="context-submenu" id="canvas-ctx-copy-submenu">
+          <!-- Populated dynamically from VGL objects -->
+        </div>
+      </div>
+      <button data-canvas-action="copy-background" id="canvas-ctx-copy-bg">🌅 Copy Background</button>
+    </div>
+
+    <!-- Prompt Expand Dialog -->
+    <dialog id="prompt-expand-dialog" class="modal modal-prompt-expand">
+      <div class="prompt-expand-inner">
+        <div class="prompt-expand-header">
+          <span class="prompt-expand-title">Prompt / Instructions</span>
+          <span class="prompt-expand-hint">Ctrl+Enter to confirm</span>
+        </div>
+        <textarea id="prompt-expand-editor" class="prompt-expand-editor"
+          placeholder="Describe thoughts, instructions, or modifications…"></textarea>
+        <div class="modal-actions">
+          <button id="prompt-expand-done" class="btn btn-primary">Done</button>
+          <button id="prompt-expand-cancel" class="btn">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- New Project Dialog -->
+    <dialog id="new-project-dialog" class="modal">
+      <form method="dialog">
+        <h3>New Project</h3>
+        <input type="text" id="new-project-name" placeholder="Project name" required />
+        <div class="modal-actions">
+          <button type="submit" value="create" class="btn btn-primary">Create</button>
+          <button type="submit" value="cancel" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- SP Preview Dialog -->
+    <dialog id="sp-preview-dialog" class="modal modal-wide">
+      <div class="sp-preview-container">
+        <h3>Structured Prompt Preview</h3>
+        <textarea id="sp-preview-editor" class="sp-preview-editor"></textarea>
+        <div class="modal-actions">
+          <button id="sp-preview-generate" class="btn btn-primary">Generate</button>
+          <button id="sp-preview-cancel" class="btn">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+    <!-- API Key Warning Dialog -->
+    <dialog id="api-key-warning-dialog" class="modal">
+      <div class="api-key-warning-inner">
+        <div class="api-key-warning-icon">🔑</div>
+        <h3>API Token Required</h3>
+        <p>A Bria API token is needed to generate images.<br>Enter it in <strong>Advanced Settings → Bria API
+            Token</strong>.</p>
+        <div class="modal-actions">
+          <button id="api-key-warning-go" class="btn btn-primary">Open Settings</button>
+          <button id="api-key-warning-close" class="btn">Dismiss</button>
+        </div>
+      </div>
+    </dialog>
+
+  </div>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+
+</html>
