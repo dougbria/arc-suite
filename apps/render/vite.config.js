@@ -40,5 +40,5 @@ export default defineConfig(({ command }) => ({
   // If deploying to a GitHub Pages project page (not user/org root),
   // set base to your repo name: base: '/vgl-studio/'
   // For a user/org page (username.github.io), leave base as '/'
-  base: '/'
+  base: '/arc-suite/'
 }));
