@@ -31,12 +31,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Monorepo Dependencies
         run: |
           rm -f package-lock.json
           npm install
+          npm i @rollup/rollup-linux-x64-gnu --no-save
 
       - name: Build Render App
         run: npm run build -w @arc/render
