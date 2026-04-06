@@ -16,7 +16,7 @@ import { randomizeSeed } from './utils.js';
 const BRIA_API_URL = 'https://engine.prod.bria-api.com/v2';
 const API_BASE = import.meta.env.PROD 
     ? BRIA_API_URL 
-    : (import.meta.env.BASE_URL + 'api').replace('//', '/'); // e.g. /arcdemo/api
+    : (import.meta.env.BASE_URL + 'api').replace('//', '/'); // e.g. /arc/api
 const TIMEOUT = 180_000; // 3 minutes for sync requests
 
 // ============================================================
@@ -210,6 +210,12 @@ async function pollStatus(requestId, requestOptions = {}) {
 
         if (requestOptions.signal?.aborted) throw new Error('Request cancelled by user.');
 
+        state.addLog({
+            type: 'request-init',
+            endpoint: `/status/${requestId}`,
+            method: 'GET'
+        });
+
         const apiKey = state.getApiKey();
         try {
             const response = await fetch(`${API_BASE}/status/${requestId}`, {
@@ -244,9 +250,19 @@ async function pollStatus(requestId, requestOptions = {}) {
                 case 'IN_PROGRESS':
                 case 'QUEUED':
                 case 'PENDING':
+                    state.addLog({
+                        type: 'response',
+                        endpoint: `/status/${requestId}`,
+                        response: data
+                    });
                     state.setLoading(true, `Processing… (${i + 1})`);
                     continue;
                 default:
+                    state.addLog({
+                        type: 'response',
+                        endpoint: `/status/${requestId}`,
+                        response: data
+                    });
                     console.warn(`[API] Unexpected/UNKNOWN status: ${status}`, data);
                     // If it's UNKNOWN for more than 4 attempts, it's likely an invalid ID or a system glitch
                     if (status === 'UNKNOWN' && i > 4) {

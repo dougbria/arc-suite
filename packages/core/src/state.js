@@ -409,6 +409,22 @@ const state = {
         }
     },
 
+    clearStarred() {
+        const project = this.getActiveProject();
+        if (!project) return;
+        let changed = false;
+        project.images.forEach(img => {
+            if (img.isStarred) {
+                img.isStarred = false;
+                changed = true;
+            }
+        });
+        if (changed) {
+            this.save();
+            this.emit('imageStarred', { bulk: true }); 
+        }
+    },
+
     async deleteImage(imageId) {
         const img = this.getImage(imageId);
         if (!img) return;
@@ -553,7 +569,7 @@ const state = {
     // ============================================================
 
     _sanitizeLog(obj) {
-        if (!obj) return obj;
+        if (obj === null || obj === undefined) return obj;
         if (typeof obj === 'string') {
             const isBase64Image = obj.startsWith('data:image/') ||
                 (obj.length > 300 && !obj.includes(' ') && !obj.trim().startsWith('{') && !obj.trim().startsWith('['));

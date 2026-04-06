@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.DS_Store
+
+# Ignore temporary root scratch scripts (locks it to the root folder only via '/')
+/*.js
+!/vite.config.js
+
+# Ignore all markdown planning/scratch files at the root level EXCEPT the README
+/*.md
+!/README.md

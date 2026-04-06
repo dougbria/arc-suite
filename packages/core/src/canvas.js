@@ -37,10 +37,94 @@ const zoomState = {
 // 'fit' | '100' | 'custom'
 let zoomMode = 'fit';
 
+const CANVAS_HTML = `
+  <section class="canvas-area" id="canvas-area">
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="welcome-screen">
+      <div class="welcome-inner">
+        <div class="welcome-icon">✦</div>
+        <h2>Welcome to Bria Arc</h2>
+        <p>Create a new project or load an existing one to start.</p>
+        <div class="welcome-actions">
+          <button id="welcome-new-btn" class="btn btn-primary">New Project</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Image Viewer -->
+    <div id="image-viewer" class="image-viewer hidden" style="display:flex; flex-direction:row; position:relative;">
+      <!-- Column Wrapper for Canvas + Footer -->
+      <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+        <div class="viewer-wrapper" id="viewer-wrapper" style="flex:1; position:relative;">
+          <img id="main-image" class="main-image" alt="Featured image" />
+          <div id="ref-indicator" class="ref-indicator hidden">Uploaded Reference</div>
+          <div id="compare-overlay" class="compare-overlay hidden">
+            <div id="compare-clipper" class="compare-clipper">
+              <img id="compare-image" class="compare-image" alt="Compare image" />
+            </div>
+            <div id="wipe-handle" class="wipe-handle">
+              <div class="wipe-line"></div>
+              <div class="wipe-knob"></div>
+            </div>
+            <button id="exit-compare-btn" class="exit-compare-btn hidden">Exit Compare</button>
+          </div>
+          <!-- Hooks mount point for overarching UI extensions -->
+          <div id="canvas-hooks-overlay" style="position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:49;"></div>
+        </div>
+
+        <!-- Image info bar -->
+        <div id="image-info-bar" class="image-info-bar" style="pointer-events:auto;">
+          <div class="info-main">
+            <span id="info-seed" class="info-seed" title="Click to copy seed">Seed: —</span>
+            <span id="info-version" class="info-version"></span>
+            <span id="info-prompt" class="info-prompt" title="Click to copy prompt">No prompt</span>
+            <div class="zoom-controls">
+              <span id="zoom-indicator" class="zoom-indicator">Fit</span>
+              <button id="zoom-fit-btn" class="zoom-btn zoom-btn-active" title="Fit (F)">Fit</button>
+              <button id="zoom-100-btn" class="zoom-btn" title="100% (1)">100%</button>
+            </div>
+          </div>
+          <div class="info-actions">
+            <!-- Hooks container for custom buttons like "Approve KF" -->
+            <div id="canvas-info-actions-hook" style="display:inline-flex; gap:0.5rem; margin-right:0.5rem;"></div>
+            <div class="gallery-nav" id="gallery-nav" style="display:flex; align-items:center;">
+              <button id="nav-jump-top-parent" class="nav-btn nav-btn-outer" title="Jump to oldest ancestor (Shift+Cmd+Up)">⇈</button>
+              <button id="nav-jump-parent" class="nav-btn nav-btn-outer" title="Jump to parent (Shift+Up)">↑</button>
+              <button id="nav-prev" class="nav-btn nav-btn-inner" title="Prev">‹</button>
+              <button id="nav-next" class="nav-btn nav-btn-inner" title="Next">›</button>
+              <button id="nav-jump-first-child" class="nav-btn nav-btn-outer" title="Jump to first child (Shift+Down)">↓</button>
+              <button id="nav-jump-last-child" class="nav-btn nav-btn-outer" title="Jump to newest child (Shift+Cmd+Down)">⇊</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading and Error Overlays -->
+      <div id="loading-overlay" class="loading-overlay hidden"><div class="spinner"></div><p class="loading-text">Generating…</p></div>
+      <div id="error-overlay" class="error-overlay hidden">
+        <div class="error-inner">
+          <div class="error-icon">⚠</div>
+          <p id="error-message" class="error-message"></p>
+          <button id="retry-btn" class="btn btn-primary">Retry</button>
+        </div>
+      </div>
+    </div>
+  </section>
+`;
+
 /**
  * Initialize the canvas/viewer module.
+ * @param {string} [mountPointId=null] If provided, generates the HTML inside this container.
  */
-export function initCanvas() {
+export function initCanvas(mountPointId = null) {
+    if (mountPointId) {
+        const container = document.getElementById(mountPointId);
+        if (container && !document.getElementById('canvas-area')) {
+            container.insertAdjacentHTML('beforeend', CANVAS_HTML);
+            console.log('[Core] Canvas UI dynamically injected into', mountPointId);
+        }
+    }
+
     elements.canvasArea = document.getElementById('canvas-area');
     elements.welcomeScreen = document.getElementById('welcome-screen');
     elements.imageViewer = document.getElementById('image-viewer');

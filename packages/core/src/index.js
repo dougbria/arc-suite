@@ -5,7 +5,7 @@ import { JobQueue } from './JobQueue.js';
 export * as Gallery from './gallery.js';
 export * as Canvas from './canvas.js';
 export * as State from './state.js';
-export * as JsonEditor from './json-editor.js';
+export * as CardJsonEditor from './card-json-editor.js';
 export { EntityEditor } from './plugins/EntityEditor.js';
 export { apiConsole } from './api-console.js';
 
@@ -16,6 +16,8 @@ export * as Actions from './actions.js';
 export * as Compare from './compare.js';
 export * as Resizer from './resizer.js';
 export * as Utils from './utils.js';
+export { PromptBar } from './components/PromptBar.js';
+export { VglInspector } from './components/VglInspector.js';
 
 export class ArcCore {
     constructor() {

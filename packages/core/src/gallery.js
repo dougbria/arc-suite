@@ -20,15 +20,63 @@ let ctxJumpParent = null;
 let ctxJumpChild = null;
 let contextImageId = null;
 
+const GALLERY_HTML = `
+  <aside class="reel-sidebar" id="reel-sidebar" style="width: var(--reel-width)">
+    <div class="reel-header">
+      <h3>Gallery</h3>
+      <span id="image-count" class="badge">0</span>
+    </div>
+    <div class="reel-scroll" id="reel-scroll">
+      <!-- Batch groups will be injected here -->
+    </div>
+    <div class="reel-footer" id="reel-footer">
+      <div class="starred-info">
+        <span class="starred-label">⭐ Starred</span>
+        <span id="starred-count" class="badge">0</span>
+      </div>
+      <div class="reel-footer-actions">
+        <button id="export-starred-btn" class="btn btn-sm btn-starred-export" title="Save starred images to a folder">⬇ Export</button>
+        <button id="clear-starred-btn" class="btn btn-sm btn-starred-clear" title="Unstar all images">✕ Clear</button>
+      </div>
+    </div>
+  </aside>
+`;
+
 /**
  * Initialize the gallery reel.
+ * @param {string} [mountPointId=null] If provided, generates the HTML inside this container.
  */
-export function initGallery() {
+export function initGallery(mountPointId = null) {
+    if (mountPointId) {
+        const container = document.getElementById(mountPointId);
+        if (container && !document.getElementById('reel-sidebar')) {
+            container.innerHTML = GALLERY_HTML;
+            console.log('[Core] Gallery UI dynamically injected into', mountPointId);
+        }
+    }
+
     reelScroll = document.getElementById('reel-scroll');
     imageCountBadge = document.getElementById('image-count');
     contextMenu = document.getElementById('context-menu');
     ctxJumpParent = document.getElementById('ctx-jump-parent');
     ctxJumpChild = document.getElementById('ctx-jump-child');
+
+    const clearBtn = document.getElementById('clear-starred-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            state.clearStarred();
+        });
+    }
+
+    const exportBtn = document.getElementById('export-starred-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', async () => {
+            if (!state.project) return;
+            const starred = state.project.images.filter(i => i.starred);
+            if (!starred.length) return alert('No starred images to export.');
+            await saveFilesToFolder(starred, state.project);
+        });
+    }
 
     // Listen for state changes
     state.on('projectChanged', () => renderGallery());

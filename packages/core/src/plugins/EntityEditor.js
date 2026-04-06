@@ -1,4 +1,4 @@
-import { State as stateEngine, JsonEditor } from '../index.js';
+import { State as stateEngine, CardJsonEditor } from '../index.js';
 // We also need access to the dataDB instance from core state
 const { dataDB } = stateEngine;
 const state = stateEngine.default || stateEngine;
@@ -156,7 +156,7 @@ export class EntityEditor {
                     if (!item.vgl) item.vgl = {};
                     item.vgl.structured_prompt = JSON.stringify(structuredData, null, 2);
                     this._saveField(item.vgl, type === 'location' ? 'background_setting' : 'description', currentDesc, item);
-                    if (jsonEditorInstance) jsonEditorInstance.setData(JsonEditor.transformStructuredPrompt(structuredData));
+                    if (jsonEditorInstance) jsonEditorInstance.setData(CardJsonEditor.transformStructuredPrompt(structuredData));
                 }
             } catch (err) {
                 console.error("VGL Generation Failed:", err);
@@ -173,7 +173,7 @@ export class EntityEditor {
         }
 
         // Initialize the new Unified JSON Editor!
-        jsonEditorInstance = new JsonEditor.JsonEditor(vglContainer, {
+        jsonEditorInstance = new CardJsonEditor.CardJsonEditor(vglContainer, {
             readonly: false,
             onChange: (newData) => {
                 if (!item.vgl) item.vgl = {};
@@ -182,7 +182,7 @@ export class EntityEditor {
                 this.state.saveWorkspace(); // auto-save
             }
         });
-        jsonEditorInstance.setData(JsonEditor.transformStructuredPrompt(parsed));
+        jsonEditorInstance.setData(CardJsonEditor.transformStructuredPrompt(parsed));
     }
 
     _saveField(targetObj, field, value, rootEntity = null) {

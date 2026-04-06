@@ -95,8 +95,9 @@ export function transformStructuredPrompt(data) {
  * @param {*}        data           - The data to display
  * @param {Element}  container      - DOM container to render into
  * @param {string[]} highlightPaths - Paths of leaf nodes that actually changed
+ * @param {Object}   oldData        - Optional previous structured data to compute inline diffs against
  */
-export function renderJsonTree(data, container, highlightPaths = []) {
+export function renderJsonTree(data, container, highlightPaths = [], oldData = null) {
     container.innerHTML = '';
     const tree = document.createElement('div');
     tree.className = 'json-tree';
@@ -175,7 +176,29 @@ export function renderJsonTree(data, container, highlightPaths = []) {
         const valueSpan = document.createElement('span');
         const type = value === null ? 'null' : typeof value;
         valueSpan.className = `tree-value tree-value-${type}`;
-        valueSpan.textContent = JSON.stringify(value);
+
+        if (isChanged && type === 'string' && oldData) {
+            // Resolving the exact old value using the dot path
+            const getDescendant = (obj, p) => p.split('.').reduce((acc, part) => acc && acc[part], obj);
+            let oldVal = getDescendant(oldData, fullPath);
+            if (typeof oldVal === 'string') {
+                const oldWords = oldVal.split(/\s+/);
+                const newWords = value.split(/\s+/);
+                const markResult = [];
+                for (let i = 0; i < newWords.length; i++) {
+                    if (!oldWords.includes(newWords[i])) {
+                        markResult.push(`<mark class="diff-word-changed">${newWords[i]}</mark>`);
+                    } else {
+                        markResult.push(newWords[i]);
+                    }
+                }
+                valueSpan.innerHTML = '"' + markResult.join(' ') + '"';
+            } else {
+                valueSpan.textContent = JSON.stringify(value);
+            }
+        } else {
+            valueSpan.textContent = JSON.stringify(value);
+        }
 
         if (isChanged) {
             item.classList.add('highlight-diff-changed');
@@ -209,6 +232,14 @@ export function renderJsonTree(data, container, highlightPaths = []) {
         const keySpan = document.createElement('span');
         keySpan.className = 'tree-key';
         keySpan.textContent = key + ': ';
+
+        if (isHighlighted) {
+            const badge = document.createElement('span');
+            badge.className = 'diff-parent-badge';
+            badge.textContent = ' •';
+            badge.title = 'Contains nested modifications';
+            keySpan.appendChild(badge);
+        }
 
         const bracket = document.createElement('span');
         bracket.className = 'tree-bracket';

@@ -32,17 +32,21 @@ function setupResizer(resizerId, prevId, nextId, mode = 'left') {
     function onMouseMove(e) {
         const delta = e.clientX - startX;
 
-        // If nextId is a sidebar, we are resizing from the left of it (delta is negative when dragging left)
-        if (nextId === 'reel-sidebar' || nextId === 'json-sidebar') {
+        // Determine if we are resizing the 'next' element or 'prev' element.
+        // Usually, a right-side sidebar is 'nextEl' attached to a resizer, and delta is negative if dragged left.
+        // But we want to support any arbitrary IDs.
+        // Let's assume nextEl is generally a right sidebar if it's not the canvas.
+        if (nextId !== 'arc-main-mount' && nextId !== 'canvas-area') {
             const newWidth = startWidthNext - delta;
             if (newWidth > 150 && newWidth < 800) {
                 nextEl.style.width = `${newWidth}px`;
+                nextEl.style.flex = 'none'; // Ensure flex layout doesn't override manual width
             }
-        } else if (prevId === 'canvas-area') {
-            // Alternatively, if we are resizing the reel from the canvas area's perspective
-            const newWidth = startWidthNext - delta;
+        } else if (prevId !== 'arc-main-mount' && prevId !== 'canvas-area') {
+            const newWidth = startWidthPrev + delta;
             if (newWidth > 150 && newWidth < 800) {
-                nextEl.style.width = `${newWidth}px`;
+                prevEl.style.width = `${newWidth}px`;
+                prevEl.style.flex = 'none';
             }
         }
     }
