@@ -287,7 +287,11 @@ function updateStorageUI() {
         storageSkipBtn?.classList.add('hidden');
         storageBannerClose?.classList.add('hidden'); // Cannot dismiss
         storageBanner?.classList.remove('hidden');
-        storageIndicatorBtn?.classList.add('hidden');
+        
+        if (storageIndicatorBtn && storageIndicatorName) {
+            storageIndicatorName.textContent = 'Storage Required';
+            storageIndicatorBtn?.classList.remove('hidden');
+        }
     } else {
         storageBanner?.classList.add('hidden');
         if (storageIndicatorBtn && storageIndicatorName) {

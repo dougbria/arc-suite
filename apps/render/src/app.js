@@ -281,7 +281,11 @@ function updateStorageUI() {
         } else {
             storageBanner?.classList.add('hidden');
         }
-        storageIndicatorBtn?.classList.add('hidden');
+        
+        if (storageIndicatorBtn && storageIndicatorName) {
+            storageIndicatorName.textContent = 'Browser Storage';
+            storageIndicatorBtn?.classList.remove('hidden');
+        }
     }
 }
 
