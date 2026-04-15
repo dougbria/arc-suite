@@ -549,7 +549,12 @@ function initUI() {
 
 function togglePromptBar() {
     if (promptBar) {
-        promptBar.classList.toggle('collapsed');
+        const isCollapsed = promptBar.classList.toggle('collapsed');
+        if (isCollapsed) {
+            // Also close advanced settings if they were open
+            const advanced = promptBar.querySelector('.prompt-advanced-details');
+            if (advanced) advanced.open = false;
+        }
     }
 }
 

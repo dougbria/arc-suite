@@ -99,9 +99,6 @@ export class PromptBar {
             </div>
           </div>
 
-
-          </div>
-
           <!-- Advanced Area: Collapsible Details -->
           <details class="prompt-advanced-details">
             <summary class="advanced-summary">Advanced Settings</summary>

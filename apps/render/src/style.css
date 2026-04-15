@@ -1520,7 +1520,8 @@ select {
   padding-bottom: 8px;
 }
 
-.prompt-bar.collapsed .prompt-layout-container {
+.prompt-bar.collapsed .prompt-layout-container,
+.prompt-bar.collapsed .prompt-advanced-details {
   display: none; /* Hide complexity in collapsed mode */
 }
 
