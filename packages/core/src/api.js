@@ -16,7 +16,7 @@ import { randomizeSeed } from './utils.js';
 const BRIA_API_URL = 'https://engine.prod.bria-api.com/v2';
 const API_BASE = import.meta.env.PROD 
     ? BRIA_API_URL 
-    : (import.meta.env.BASE_URL + 'api').replace('//', '/'); // e.g. /arc/api
+    : '/api/v2'; 
 const TIMEOUT = 180_000; // 3 minutes for sync requests
 
 // ============================================================

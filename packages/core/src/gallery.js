@@ -19,12 +19,19 @@ let contextMenu = null;
 let ctxJumpParent = null;
 let ctxJumpChild = null;
 let contextImageId = null;
+let collapsedGroups = new Set();
+let hoveredImageId = null;
 
 const GALLERY_HTML = `
   <aside class="reel-sidebar" id="reel-sidebar" style="width: var(--reel-width)">
-    <div class="reel-header">
-      <h3>Gallery</h3>
-      <span id="image-count" class="badge">0</span>
+    <div class="reel-header" style="display: flex; flex-direction: column; align-items: stretch; gap: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+        <h3>Gallery <span id="image-count" class="badge">0</span></h3>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="range" id="gallery-zoom-slider" min="50" max="250" value="110" style="width: 60px; height: 4px;" title="Zoom Thumbnails" />
+          <button id="toggle-all-groups-btn" class="icon-btn tiny" title="Collapse/Expand All">↕</button>
+        </div>
+      </div>
     </div>
     <div class="reel-scroll" id="reel-scroll">
       <!-- Batch groups will be injected here -->
@@ -40,6 +47,34 @@ const GALLERY_HTML = `
       </div>
     </div>
   </aside>
+
+  <!-- Context Menu -->
+  <div id="context-menu" class="context-menu hidden">
+    <button data-action="compare">🔀 Compare</button>
+    <button data-action="jump-to-top-parent" id="ctx-jump-top-parent" class="hidden">⇈ Jump to Top Parent</button>
+    <button data-action="jump-to-parent" id="ctx-jump-parent" class="hidden">⬆ Jump to Parent</button>
+    <button data-action="jump-to-first-child" id="ctx-jump-first-child" class="hidden">⬇ Jump to First Child</button>
+    <button data-action="jump-to-latest-child" id="ctx-jump-latest-child" class="hidden">⇊ Jump to Latest Child</button>
+    <button data-action="star">⭐ Star / Unstar</button>
+    <hr />
+    <button data-action="enhance">✨ Creative Enhancer</button>
+    <div class="context-submenu-item">
+      <button class="context-submenu-trigger">📐 Increase Resolution ▶</button>
+      <div class="context-submenu">
+        <button data-action="increase-resolution" data-scale="2">2× Resolution</button>
+        <button data-action="increase-resolution" data-scale="4">4× Resolution</button>
+      </div>
+    </div>
+    <hr />
+    <button data-action="download-png">⬇ Download PNG</button>
+    <button data-action="download-sp">📄 Download VGL</button>
+    <button data-action="show-in-folder">📂 Show in Folder</button>
+    <hr />
+    <button data-action="copy-seed">📋 Copy Seed</button>
+    <button data-action="copy-prompt">📋 Copy Prompt</button>
+    <hr />
+    <button data-action="delete" class="danger-text">✕ Delete Image</button>
+  </div>
 `;
 
 /**
@@ -71,12 +106,89 @@ export function initGallery(mountPointId = null) {
     const exportBtn = document.getElementById('export-starred-btn');
     if (exportBtn) {
         exportBtn.addEventListener('click', async () => {
-            if (!state.project) return;
-            const starred = state.project.images.filter(i => i.starred);
+            const project = state.getActiveProject();
+            if (!project) return;
+            const starred = project.images.filter(i => i.isStarred);
             if (!starred.length) return alert('No starred images to export.');
-            await saveFilesToFolder(starred, state.project);
+            
+            async function resolveBase64(imgRecord) {
+                if (imgRecord.base64) return imgRecord.base64;
+                if (state.storageType === 'fs') {
+                    const { fsStorage } = await import('./fs-storage.js');
+                    return await fsStorage.loadImage(project.id, imgRecord.id);
+                }
+                return null;
+            }
+
+            const files = [];
+            for (const img of starred) {
+                const base = generateFilename(img, project.name, project);
+                const txtBase = generateTxtFilename(img, project.name, project);
+                const b64 = await resolveBase64(img);
+                const txtContent = generateTxtReport(img, project);
+                
+                if (b64) files.push({ name: base + '.png', blob: await fetch(b64).then(r => r.blob()) });
+                if (txtContent) files.push({ name: txtBase + '.txt', blob: new Blob([txtContent], { type: 'text/plain;charset=utf-8' }) });
+                
+                if (img.structured_prompt) {
+                    let spObj;
+                    try { spObj = typeof img.structured_prompt === 'string' ? JSON.parse(img.structured_prompt) : img.structured_prompt; } catch { spObj = img.structured_prompt; }
+                    files.push({ name: base + '.json', blob: new Blob([JSON.stringify(spObj, null, 2)], { type: 'application/json' }) });
+                }
+            }
+            if (files.length) {
+                await saveFilesToFolder(files);
+            }
         });
     }
+
+    const zoomSlider = document.getElementById('gallery-zoom-slider');
+    if (zoomSlider) {
+        zoomSlider.addEventListener('input', (e) => {
+            document.documentElement.style.setProperty('--thumbnail-size', `${e.target.value}px`);
+        });
+    }
+
+    const toggleAllBtn = document.getElementById('toggle-all-groups-btn');
+    if (toggleAllBtn) {
+        toggleAllBtn.addEventListener('click', () => {
+             const batches = state.getImageBatches();
+             if (collapsedGroups.size > 0) {
+                 collapsedGroups.clear();
+             } else {
+                 batches.forEach(b => collapsedGroups.add(b.batchId));
+             }
+             renderGallery();
+        });
+    }
+
+    // Buffer keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+        
+        let num = NaN;
+        if (e.code && e.code.startsWith('Digit')) {
+            num = parseInt(e.code.replace('Digit', ''), 10);
+        } else if (e.code && e.code.startsWith('Numpad')) {
+            num = parseInt(e.code.replace('Numpad', ''), 10);
+        }
+
+        if (!isNaN(num) && num >= 1 && num <= 9) {
+            e.preventDefault();
+            if (e.shiftKey) {
+                const targetId = hoveredImageId || state.featuredImageId;
+                if (targetId) {
+                    state.setBuffer(num, targetId);
+                    showToast(`Assigned buffer ${num}`);
+                    renderGallery();
+                }
+            } else {
+                if (state.imageBuffers && state.imageBuffers[num]) {
+                    state.loadBuffer(num);
+                }
+            }
+        }
+    });
 
     // Listen for state changes
     state.on('projectChanged', () => renderGallery());
@@ -90,24 +202,27 @@ export function initGallery(mountPointId = null) {
     state.on('compareChanged', () => highlightActive());
 
     // Context menu actions
-    contextMenu.addEventListener('click', handleContextAction);
+    if (contextMenu) {
+        contextMenu.addEventListener('click', handleContextAction);
 
-    // Close context menu on click elsewhere
-    document.addEventListener('click', (e) => {
-        if (!contextMenu.contains(e.target)) {
-            contextMenu.classList.add('hidden');
-        }
-    });
+        // Close context menu on click elsewhere
+        document.addEventListener('click', (e) => {
+            if (!contextMenu.contains(e.target)) {
+                contextMenu.classList.add('hidden');
+            }
+        });
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            contextMenu.classList.add('hidden');
-        }
-    });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                contextMenu.classList.add('hidden');
+            }
+        });
+    }
 
     // Event Delegation for Gallery Actions
-    reelScroll.addEventListener('click', async (e) => {
-        const thumb = e.target.closest('.thumbnail');
+    if (reelScroll) {
+        reelScroll.addEventListener('click', async (e) => {
+            const thumb = e.target.closest('.thumbnail');
         if (thumb) {
             const imgId = thumb.dataset.imageId;
 
@@ -119,6 +234,18 @@ export function initGallery(mountPointId = null) {
 
             // Default selection
             state.setFeaturedImage(imgId);
+            return;
+        }
+
+        const collapseToggle = e.target.closest('.batch-collapse-toggle');
+        if (collapseToggle) {
+            const batchId = collapseToggle.dataset.batchId;
+            if (collapsedGroups.has(batchId)) {
+                collapsedGroups.delete(batchId);
+            } else {
+                collapsedGroups.add(batchId);
+            }
+            renderGallery();
             return;
         }
 
@@ -140,15 +267,28 @@ export function initGallery(mountPointId = null) {
         }
     });
 
-    // Handle batch note changes
-    reelScroll.addEventListener('input', (e) => {
-        if (e.target.classList.contains('batch-note-input')) {
-            const batchId = e.target.dataset.batchId;
-            state.updateBatchNote(batchId, e.target.value);
-        }
+    reelScroll.addEventListener('mouseover', (e) => {
+        const thumb = e.target.closest('.thumbnail');
+        if (thumb) hoveredImageId = thumb.dataset.imageId;
     });
 
-    renderGallery();
+    reelScroll.addEventListener('mouseout', (e) => {
+        const thumb = e.target.closest('.thumbnail');
+        if (thumb && hoveredImageId === thumb.dataset.imageId) hoveredImageId = null;
+    });
+
+        // Handle batch note changes
+        reelScroll.addEventListener('input', (e) => {
+            if (e.target.classList.contains('batch-note-input')) {
+                const batchId = e.target.dataset.batchId;
+                state.updateBatchNote(batchId, e.target.value);
+            }
+        });
+    }
+
+    if (reelScroll) {
+        renderGallery();
+    }
 }
 
 /**
@@ -176,6 +316,17 @@ function renderGallery() {
     highlightActive();
 }
 
+function getBufferBadgeHTML(imgId) {
+    const buffers = [];
+    for (let i = 1; i <= 9; i++) {
+        if (state.imageBuffers && state.imageBuffers[i] === imgId) buffers.push(i);
+    }
+    if (buffers.length > 0) {
+        return `<div class="buffer-badge" style="position: absolute; bottom: 4px; left: 4px; background: var(--accent); color: white; padding: 2px 5px; border-radius: 4px; font-size: 10px; font-weight: bold; z-index: 10; box-shadow: 0 1px 3px rgba(0,0,0,0.5);">${buffers.join(', ')}</div>`;
+    }
+    return '';
+}
+
 /**
  * Render a single batch group.
  */
@@ -200,6 +351,7 @@ function renderBatch(batch) {
         <button class="thumb-action-btn star-btn" title="${img.isStarred ? 'Unstar' : 'Star'} image">${img.isStarred ? '★' : '☆'}</button>
       </div>
       ${img.isReference ? '<div class="reference-badge">REF</div>' : ''}
+      ${getBufferBadgeHTML(img.id)}
     </div>
   `;
     }).join('');
@@ -213,13 +365,20 @@ function renderBatch(batch) {
         batchVersionStr = `<span class="batch-version" style="margin-left: 8px; color: var(--text-muted); font-size: 11px; font-weight: 500; font-family: monospace;">v${vNum}${vSuf}</span>`;
     }
 
+    const hasStarred = batch.images.some(img => img.isStarred);
+    const starIndicator = hasStarred ? '<span style="color: var(--warning); margin-left: 6px; font-size: 14px;">★</span>' : '';
+    const isCollapsed = collapsedGroups.has(batch.batchId);
+    const collapseText = isCollapsed ? '▶' : '▼';
+
     return `
-    <div class="batch-group" data-batch-id="${batch.batchId}">
+    <div class="batch-group ${isCollapsed ? 'collapsed' : ''}" data-batch-id="${batch.batchId}">
       <div class="batch-header">
         <div class="batch-top">
-            <div style="display: flex; align-items: center;">
+            <div style="display: flex; align-items: center; cursor: pointer; flex: 1;" class="batch-collapse-toggle" data-batch-id="${batch.batchId}">
+                <span style="font-size: 10px; margin-right: 6px; width: 12px; text-align: center; color: var(--text-muted);">${collapseText}</span>
                 <div class="batch-mode-badge ${batch.mode || 'generate'}">${(batch.mode || 'generate').toUpperCase()}</div>
                 ${batchVersionStr}
+                ${starIndicator}
             </div>
             <div class="batch-meta">
                 <span class="batch-time">${formatTime(batch.createdAt)}</span>
@@ -228,9 +387,10 @@ function renderBatch(batch) {
         </div>
         <input type="text" class="batch-note-input" placeholder="Batch instructions/notes…" 
                value="${noteValue.replace(/"/g, '&quot;')}" 
-               data-batch-id="${batch.batchId}" />
+               data-batch-id="${batch.batchId}"
+               style="display: ${isCollapsed ? 'none' : 'block'};" />
       </div>
-      <div class="batch-grid">
+      <div class="batch-grid" style="display: ${isCollapsed ? 'none' : 'grid'};">
         ${thumbnails}
       </div>
     </div>

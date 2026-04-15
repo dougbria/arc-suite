@@ -16,7 +16,7 @@ export default defineConfig(({ command }) => ({
     // In production, api.js switches API_BASE to the direct URL via import.meta.env.PROD
     proxy: {
       '/api': {
-        target: 'https://engine.prod.bria-api.com/v2',
+        target: 'https://engine.prod.bria-api.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
         secure: false

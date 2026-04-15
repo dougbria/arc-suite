@@ -187,19 +187,39 @@ const spPreviewEditor = getEl('sp-preview-editor');
 const spPreviewGenerate = getEl('sp-preview-generate');
 const spPreviewCancel = getEl('sp-preview-cancel');
 
-// API Key Warning Dialog
-const apiKeyWarningDialog = getEl('api-key-warning-dialog');
-const apiKeyWarningGo = getEl('api-key-warning-go');
-const apiKeyWarningClose = getEl('api-key-warning-close');
+// Settings Dialog
+const settingsDialog = getEl('settings-dialog');
+const settingsBtn = getEl('settings-btn');
+const settingsBriaKey = getEl('settings-bria-key');
+const settingsAnthropicKey = getEl('settings-anthropic-key');
+const settingsSaveBtn = getEl('settings-save-btn');
+const settingsCancelBtn = getEl('settings-cancel-btn');
 
-apiKeyWarningGo?.addEventListener('click', () => {
-    apiKeyWarningDialog?.close();
-    const advanced = document.querySelector('.prompt-advanced-details');
-    if (advanced) advanced.open = true;
-    apiKeyInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    apiKeyInput?.focus();
+settingsBtn?.addEventListener('click', () => {
+    settingsBriaKey.value = localStorage.getItem('vgl-studio-api-key') || '';
+    settingsAnthropicKey.value = localStorage.getItem('arcdrama-anthropic-key') || '';
+    settingsDialog?.showModal();
 });
-apiKeyWarningClose?.addEventListener('click', () => apiKeyWarningDialog?.close());
+
+settingsSaveBtn?.addEventListener('click', () => {
+    const briaKey = settingsBriaKey.value.trim();
+    if (briaKey) {
+        localStorage.setItem('vgl-studio-api-key', briaKey);
+        state.setApiKey(briaKey);
+    } else {
+        localStorage.removeItem('vgl-studio-api-key');
+    }
+
+    const antKey = settingsAnthropicKey.value.trim();
+    if (antKey) {
+        localStorage.setItem('arcdrama-anthropic-key', antKey);
+    } else {
+        localStorage.removeItem('arcdrama-anthropic-key');
+    }
+    settingsDialog?.close();
+});
+
+settingsCancelBtn?.addEventListener('click', () => settingsDialog?.close());
 
 const globalConsoleBtn = getEl('global-console-btn');
 
@@ -241,7 +261,7 @@ let currentAbortController = null;
     initSidebarController();
     initReviewUI();
     initRegenQueue();
-    initGallery();
+    initGallery('arc-gallery-mount');
     initCompare();
     initResizers([
         { resizerId: 'resizer-gallery', prevId: 'arc-main-mount', nextId: 'arc-gallery-mount', mode: 'horizontal' },
@@ -1100,6 +1120,13 @@ async function handleAction(mode) {
                     if (foundShot && foundScene) {
                         activeCharacterIds = foundShot.characterIds || [];
                         activeLocationId = foundScene.locationId || null;
+                    }
+                } else if (state.canvasMode === 'setup' && state.editingEntity) {
+                    // Prototypes: pull VGL directly from the active Entity
+                    if (state.editingEntity.id.startsWith('char_')) {
+                        activeCharacterIds = [state.editingEntity.id];
+                    } else if (state.editingEntity.id.startsWith('loc_')) {
+                        activeLocationId = state.editingEntity.id;
                     }
                 } else if (promptCharSelect || promptLocSelect) { // Fallback for standalone tests
                     activeCharacterIds = promptCharSelect ? Array.from(promptCharSelect.selectedOptions).map(o => o.value) : [];

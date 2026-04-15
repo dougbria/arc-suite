@@ -8,13 +8,13 @@ export function initCanvasController() {
   // Add mode switching
   state.on('canvasModeChanged', () => {
     const mode = state.canvasMode;
-    document.getElementById('arc-image-view').classList.toggle('hidden', mode !== 'image');
-    document.getElementById('arc-storyboard-view').classList.toggle('hidden', mode !== 'storyboard');
-    document.getElementById('arc-setup-view').classList.toggle('hidden', mode !== 'setup');
-    document.getElementById('arc-map-view').classList.toggle('hidden', mode !== 'map');
+    document.getElementById('arc-image-view')?.classList.toggle('hidden', mode !== 'image');
+    document.getElementById('arc-storyboard-view')?.classList.toggle('hidden', mode !== 'storyboard');
+    document.getElementById('arc-setup-view')?.classList.toggle('hidden', mode !== 'setup');
+    document.getElementById('arc-map-view')?.classList.toggle('hidden', mode !== 'map');
 
-    // Show/hide Arc's gallery sidebar (only in Image mode)
-    document.getElementById('reel-sidebar').classList.toggle('hidden', mode !== 'image');
+    // Show/hide Arc's gallery sidebar (only hide in Storyboard mode)
+    document.getElementById('reel-sidebar')?.classList.toggle('hidden', mode === 'storyboard');
     
     // Hide the prompt-bar (generation footer) if we are not actively in Shot Production
     const promptBar = document.getElementById('prompt-bar');

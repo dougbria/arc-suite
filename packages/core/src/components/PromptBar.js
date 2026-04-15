@@ -1,24 +1,24 @@
 export class PromptBar {
-    constructor(mountPointId) {
-        this.mountPointId = mountPointId;
-    }
+  constructor(mountPointId) {
+    this.mountPointId = mountPointId;
+  }
 
-    render() {
-        const container = document.getElementById(this.mountPointId);
-        if (!container) return;
+  render() {
+    const container = document.getElementById(this.mountPointId);
+    if (!container) return;
 
-        if (document.getElementById('prompt-bar')) return;
+    if (document.getElementById('prompt-bar')) return;
 
-        container.insertAdjacentHTML('beforeend', `
-    <!-- ==================== PROMPT BAR (Bottom) ==================== -->
-    <footer class="prompt-bar" id="prompt-bar">
+    container.insertAdjacentHTML('beforeend', `
+    <!-- ==================== PROMPT BAR (Floating Dock) ==================== -->
+    <div class="prompt-bar" id="prompt-bar">
+      <button id="prompt-bar-collapse-btn" class="prompt-bar-collapse-btn" title="Toggle Prompt Bar (Ctrl+P)">┈</button>
       <div class="prompt-bar-inner">
         <!-- Reorganized Layout: Primary (Top) and Advanced (Collapsible) -->
         <div class="prompt-layout-container">
 
           <!-- Primary Area: Prompt, Buttons, then Settings -->
           <div class="prompt-primary-area">
-
             <!-- 1. Prompt & Upload -->
             <div class="prompt-input-group">
               <label for="prompt-input" class="main-label">Prompt/Instructions</label>
@@ -35,69 +35,70 @@ export class PromptBar {
                   </div>
                 </div>
                 <div class="prompt-input-wrap">
-                  <textarea id="prompt-input" class="prompt-input" rows="3"
+                  <textarea id="prompt-input" class="prompt-input" rows="2"
                     placeholder="Describe thoughts, instructions, or modifications…"></textarea>
                   <button id="prompt-expand-btn" class="prompt-expand-btn" title="Expand editor (Shift+Enter)">⤢</button>
                 </div>
               </div>
             </div>
 
-            <!-- 2. Action Buttons (Progress replaces this during gen) -->
-            <div class="prompt-action-container">
-              <div id="action-buttons-stack" class="action-buttons-stack">
-                <button id="btn-generate" class="btn btn-primary">Generate</button>
-                <button id="btn-refine" class="btn btn-secondary" disabled>Refine</button>
-                <button id="btn-edit" class="btn btn-secondary" disabled>Edit</button>
-              </div>
-              <!-- Integrated Progress/Cancel Button -->
-              <button id="btn-interrupt" class="btn btn-primary btn-progress hidden">
-                <span class="progress-text">Generating...</span>
-                <span class="interrupt-icon">✕</span>
-              </button>
-            </div>
-
-            <!-- 3. Quick Settings (Count, Ratio, Seed) -->
-            <div class="prompt-quick-settings">
-              <div class="quick-params-grid">
-                <div class="quick-param-top-row">
-                  <div class="param-item">
-                    <label>Count</label>
-                    <select id="image-count-select">
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4" selected>4</option>
-                    </select>
-                  </div>
-                  <div class="param-item">
-                    <label>Ratio</label>
-                    <select id="aspect-ratio-select">
-                      <option value="">Auto</option>
-                      <option value="1:1">1:1</option>
-                      <option value="2:3">2:3</option>
-                      <option value="3:2">3:2</option>
-                      <option value="4:5">4:5</option>
-                      <option value="5:4">5:4</option>
-                      <option value="9:16">9:16</option>
-                      <option value="16:9">16:9</option>
-                      <option value="9:21">9:21</option>
-                      <option value="21:9">21:9</option>
-                    </select>
-                  </div>
-                  <div class="param-item">
-                    <label>Mode</label>
-                    <button id="lite-quick-btn" class="lite-quick-btn" type="button" title="Use the faster Lite model for generation &amp; layout">⚡ Lite</button>
-                  </div>
+            <!-- 2. Lower Controls Row -->
+            <div class="prompt-controls-row">
+              <!-- Action Buttons (Segmented Control) -->
+              <div class="prompt-action-container">
+                <div id="action-buttons-stack" class="action-buttons-combo">
+                  <button id="btn-generate" class="btn btn-primary combo-primary" title="Generate New">✨ Generate</button>
+                  <button id="btn-refine" class="btn btn-secondary combo-segment" disabled title="Refine generated image">⟲ Refine</button>
+                  <button id="btn-edit" class="btn btn-secondary combo-segment" disabled title="Edit image">✎ Edit</button>
                 </div>
+                <!-- Integrated Progress/Cancel Button -->
+                <button id="btn-interrupt" class="btn btn-primary btn-progress hidden">
+                  <span class="progress-text">Generating...</span>
+                  <span class="interrupt-icon">✕</span>
+                </button>
+              </div>
 
-                <div class="quick-param-bottom-row" style="margin-top:0.5rem">
-                  <div class="param-item full-width">
-                    <label>Seed</label>
-                    <input type="number" id="seed-input" placeholder="Rand" title="Leave empty for a random seed each time" />
+              <!-- Quick Settings (Count, Ratio, Seed) -->
+              <div class="prompt-quick-settings">
+                  <div class="quick-params-row">
+                    <div class="param-item">
+                      <label>Count</label>
+                      <select id="image-count-select">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4" selected>4</option>
+                      </select>
+                    </div>
+                    <div class="param-item">
+                      <label>Ratio</label>
+                      <select id="aspect-ratio-select">
+                        <option value="">Auto</option>
+                        <option value="1:1">1:1</option>
+                        <option value="2:3">2:3</option>
+                        <option value="3:2">3:2</option>
+                        <option value="4:5">4:5</option>
+                        <option value="5:4">5:4</option>
+                        <option value="9:16">9:16</option>
+                        <option value="16:9">16:9</option>
+                        <option value="9:21">9:21</option>
+                        <option value="21:9">21:9</option>
+                      </select>
+                    </div>
+                    <div class="param-item seed-item">
+                      <label>Seed</label>
+                      <input type="number" id="seed-input" placeholder="Random" title="Leave empty for a random seed each time" />
+                    </div>
                   </div>
-                </div>
+              </div>
+
+              <!-- Integrated Console Link -->
+              <div id="logs-panel" class="prompt-console-action">
+                <button id="global-console-btn" class="console-link-btn" title="Open API Request/Response Console">API Console</button>
               </div>
             </div>
+          </div>
+
 
           </div>
 
@@ -123,7 +124,7 @@ export class PromptBar {
 
               <!-- Toggles Grid -->
               <div class="toggles-grid">
-                <div class="toggle-item" style="display:none">
+                <div class="toggle-item">
                   <label class="toggle-switch">
                     <input type="checkbox" id="lite-mode-toggle" />
                     <span class="toggle-slider"></span>
@@ -182,11 +183,7 @@ export class PromptBar {
         </div>
       </div>
 
-      <!-- Global Console Trigger -->
-      <div class="vgl-panel" id="logs-panel" style="padding: 8px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
-        <button id="global-console-btn" class="btn btn-secondary btn-sm">Open API Console</button>
-      </div>
-    </footer>
+    </div>
         `);
-    }
+  }
 }

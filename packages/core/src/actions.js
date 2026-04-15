@@ -13,7 +13,7 @@ export async function enhanceImage(imageId, options = {}) {
     const project = state.getActiveProject();
     const img = project.images.find(i => i.id === imageId);
     if (!img) return;
-
+    
     state.setLoading(true, 'Creative Enhancer — processing…');
     try {
         const result = await api.enhance(img.base64, img.seed, {
@@ -28,6 +28,49 @@ export async function enhanceImage(imageId, options = {}) {
     } catch (err) {
         console.error('Enhance error:', err);
         state.setError('Creative Enhancer failed: ' + err.message);
+    } finally {
+        state.setLoading(false);
+    }
+}
+
+/**
+ * Core image generation action.
+ */
+export async function generateImage(prompt, seed, count, options = {}) {
+    state.setLoading(true, count > 1 ? `Generating ${count} images…` : 'Generating image…');
+    state.clearError();
+
+    const parentId = options.parentImageId || null;
+    const mode = options.mode || 'generate';
+    const batchId = generateUUID();
+
+    try {
+        const promises = [];
+        for (let i = 0; i < count; i++) {
+            // If it's a batch, we might want to vary the seed if it was 'random'
+            const currentSeed = (seed === null || seed === 0) ? -1 : seed;
+            
+            const p = api.generate(prompt, currentSeed, options.inputImageBase64, options)
+                .then(async (result) => {
+                    const thumbnail = await createThumbnail(result.base64, 200);
+                    return await state.addImage(
+                        { ...result, thumbnail }, 
+                        prompt, 
+                        mode, 
+                        batchId, 
+                        parentId
+                    );
+                });
+            promises.push(p);
+        }
+
+        const results = await Promise.all(promises);
+        showToast(`✓ Generated ${results.length} image${results.length !== 1 ? 's' : ''}`);
+        return results;
+    } catch (err) {
+        console.error('Generation error:', err);
+        state.setError('Generation failed: ' + err.message);
+        throw err;
     } finally {
         state.setLoading(false);
     }

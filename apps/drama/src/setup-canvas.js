@@ -26,7 +26,53 @@ export function initSetupCanvas() {
                 new EntityEditor().renderEditor(styleContainer, state.workspace.style, 'style');
             }
         }
+        
+        renderEntityLists();
     });
+
+    const addCharBtn = document.getElementById('add-character-btn');
+    if (addCharBtn) {
+        addCharBtn.addEventListener('click', () => {
+            if (!state.workspace) return;
+            const newChar = {
+                id: 'char_' + crypto.randomUUID(),
+                name: 'New Character',
+                isLocked: false,
+                vgl: { description: '' },
+                referenceImageIds: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                entityVersion: 1,
+                entityHistory: []
+            };
+            state.workspace.characters.push(newChar);
+            state.saveWorkspace();
+            state.editingEntity = newChar;
+            renderEntityLists();
+        });
+    }
+
+    const addLocBtn = document.getElementById('add-location-btn');
+    if (addLocBtn) {
+        addLocBtn.addEventListener('click', () => {
+            if (!state.workspace) return;
+            const newLoc = {
+                id: 'loc_' + crypto.randomUUID(),
+                name: 'New Location',
+                isLocked: false,
+                vgl: { background_setting: '', lighting: {} },
+                referenceImageIds: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                entityVersion: 1,
+                entityHistory: []
+            };
+            state.workspace.locations.push(newLoc);
+            state.saveWorkspace();
+            state.editingEntity = newLoc;
+            renderEntityLists();
+        });
+    }
 
     if (newWorkspaceBtn) {
         newWorkspaceBtn.addEventListener('click', async () => {
@@ -166,6 +212,7 @@ export function initSetupCanvas() {
                   if (state.populateEntities) {
                        await state.populateEntities(struct);
                        alertUser('Characters & Locations populated! Switch back to setup to review.');
+                       renderEntityLists();
                   }
                   
                   popBtn.textContent = 'Populate Characters & Locations';
@@ -268,6 +315,67 @@ export function initSetupCanvas() {
     
     // Initial compute
     if (jsonOutput) updateEstimates(jsonOutput.value);
+}
+
+function renderEntityLists() {
+    if (!state.workspace) return;
+    
+    // Characters
+    const charListEl = document.getElementById('character-registry-list');
+    const charContainer = document.getElementById('character-editor-container');
+    const charEmpty = document.getElementById('character-empty-state');
+    
+    if (charListEl) {
+        charListEl.innerHTML = '';
+        state.workspace.characters.forEach(char => {
+            const item = document.createElement('div');
+            item.className = `md-list-item ${state.editingEntity?.id === char.id ? 'active' : ''}`;
+            item.innerHTML = `<strong>${char.name}</strong>`;
+            
+            // Add a small lock icon if it is locked
+            if (char.isLocked) {
+                item.innerHTML += ` <span style="font-size:0.8rem; opacity:0.6;">🔒</span>`;
+            }
+            
+            item.onclick = () => {
+                state.editingEntity = char;
+                renderEntityLists(); // re-render to update active state
+                charEmpty?.classList.add('hidden');
+                charContainer?.classList.remove('hidden');
+                charContainer.innerHTML = '';
+                new EntityEditor().renderEditor(charContainer, state.editingEntity, 'character');
+            };
+            charListEl.appendChild(item);
+        });
+    }
+
+    // Locations
+    const locListEl = document.getElementById('location-registry-list');
+    const locContainer = document.getElementById('location-editor-container');
+    const locEmpty = document.getElementById('location-empty-state');
+
+    if (locListEl) {
+        locListEl.innerHTML = '';
+        state.workspace.locations.forEach(loc => {
+            const item = document.createElement('div');
+            item.className = `md-list-item ${state.editingEntity?.id === loc.id ? 'active' : ''}`;
+            item.innerHTML = `<strong>${loc.name}</strong>`;
+            
+            if (loc.isLocked) {
+                item.innerHTML += ` <span style="font-size:0.8rem; opacity:0.6;">🔒</span>`;
+            }
+
+            item.onclick = () => {
+                state.editingEntity = loc;
+                renderEntityLists(); // re-render to update active state
+                locEmpty?.classList.add('hidden');
+                locContainer?.classList.remove('hidden');
+                locContainer.innerHTML = '';
+                new EntityEditor().renderEditor(locContainer, state.editingEntity, 'location');
+            };
+            locListEl.appendChild(item);
+        });
+    }
 }
 
 function updateEstimates(text) {

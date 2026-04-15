@@ -45,6 +45,7 @@
         </div>
       </div>
       <div class="header-right">
+        <button id="settings-btn" class="icon-btn" title="Open Settings" style="font-size: 1.2rem;">⚙</button>
         <button id="delete-shot-btn" class="icon-btn danger" title="Delete Shot">✕</button>
         <button id="storage-indicator-btn" class="storage-indicator-btn hidden" title="Change storage folder">
           <span class="storage-indicator-icon">📁</span>
@@ -156,17 +157,22 @@
         </div>
       </div>
     </dialog>
-    <!-- API Key Warning Dialog -->
-    <dialog id="api-key-warning-dialog" class="modal">
-      <div class="api-key-warning-inner">
-        <div class="api-key-warning-icon">🔑</div>
-        <h3>API Token Required</h3>
-        <p>A Bria API token is needed to generate images.<br>Enter it in <strong>Advanced Settings → Bria API
-            Token</strong>.</p>
-        <div class="modal-actions">
-          <button id="api-key-warning-go" class="btn btn-primary">Open Settings</button>
-          <button id="api-key-warning-close" class="btn">Dismiss</button>
+    <!-- Settings Dialog -->
+    <dialog id="settings-dialog" class="modal">
+      <h3 style="margin-top:0; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem;">Settings</h3>
+      <div style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+        <div>
+          <label style="display:block; margin-bottom:0.25rem; font-weight:600; font-size:0.85rem; color:var(--text-muted);">Bria AI API Token (Image Gen)</label>
+          <input type="password" id="settings-bria-key" class="prompt-input" style="width:100%; border:1px solid var(--border-color);" placeholder="ey..." />
         </div>
+        <div>
+          <label style="display:block; margin-bottom:0.25rem; font-weight:600; font-size:0.85rem; color:var(--text-muted);">Anthropic API Key (Script Breakdown LLM)</label>
+          <input type="password" id="settings-anthropic-key" class="prompt-input" style="width:100%; border:1px solid var(--border-color);" placeholder="sk-ant-..." />
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:1.5rem;">
+        <button id="settings-save-btn" class="btn btn-primary">Save Settings</button>
+        <button id="settings-cancel-btn" class="btn">Cancel</button>
       </div>
     </dialog>
 

@@ -72,6 +72,8 @@ const state = {
     lastPrompt: '',
     /** @type {Array} */
     logs: [],
+    /** @type {Object<number, string>} */
+    imageBuffers: {},
 
     /**
      * 'fs'      — File System Access API, folder ready
@@ -406,6 +408,27 @@ const state = {
             img.isStarred = !img.isStarred;
             this.save();
             this.emit('imageStarred', { imageId, isStarred: img.isStarred });
+        }
+    },
+
+    setBuffer(num, imageId) {
+        if (this.imageBuffers[num] === imageId) {
+            delete this.imageBuffers[num];
+        } else {
+            for (let i = 1; i <= 9; i++) {
+                if (this.imageBuffers[i] === imageId) {
+                    delete this.imageBuffers[i];
+                }
+            }
+            this.imageBuffers[num] = imageId;
+        }
+        this.emit('buffersChanged');
+    },
+
+    loadBuffer(num) {
+        const imageId = this.imageBuffers[num];
+        if (imageId && this.getImage(imageId)) {
+            this.setFeaturedImage(imageId);
         }
     },
 

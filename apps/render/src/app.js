@@ -1,6 +1,7 @@
 /* ============================================================
    app.js — Main application controller
    Wires together all modules and event handlers.
+   [REFRESH_CHECK_TAG_001]
    ============================================================ */
 
 import { 
@@ -99,93 +100,461 @@ const getEl = (id) => {
     return el;
 };
 
-// Mount UI Footers synchronously before querying the DOM
-new PromptBar('app').render();
-
-// Main Elements
-const projectSelect = getEl('project-select');
-const newProjectBtn = getEl('new-project-btn');
-const deleteProjectBtn = getEl('delete-project-btn');
-const newProjectDialog = getEl('new-project-dialog');
-const newProjectName = getEl('new-project-name');
-const welcomeNewBtn = getEl('welcome-new-btn');
-const apiKeyInput = getEl('api-key-input');
-const apiKeyToggle = getEl('api-key-toggle');
-
-// JSON Sidebar Elements
-// Element references stripped for component migration
-
-const promptInput = getEl('prompt-input');
-const negativePromptInput = getEl('negative-prompt-input');
-const imageCountSelect = getEl('image-count-select');
-const aspectRatioSelect = getEl('aspect-ratio-select');
-const resolutionSelect = getEl('resolution-select');
-const seedInput = getEl('seed-input');
-
-const liteModeToggle = getEl('lite-mode-toggle');
-const liteQuickBtn   = document.getElementById('lite-quick-btn');
-
-// Sync button ↔ hidden checkbox so any existing code reading liteModeToggle still works
-if (liteQuickBtn) {
-    liteQuickBtn?.addEventListener('click', () => {
-        const isNowActive = liteQuickBtn?.classList.toggle('active');
-        if (liteModeToggle) liteModeToggle.checked = isNowActive;
-    });
-}
-const modContentToggle = getEl('mod-content-toggle');
-const modInputToggle = getEl('mod-input-toggle');
-const modOutputToggle = getEl('mod-output-toggle');
-const previewSpCheckbox = getEl('preview-sp-checkbox');
-
-const imageUpload = getEl('image-upload');
-const uploadBtnText = getEl('upload-btn-text');
-const uploadPreviewWrap = getEl('upload-preview-wrap');
-const uploadPreview = getEl('upload-preview');
-const clearUploadBtn = getEl('clear-upload-btn');
-
-const btnGenerate = getEl('btn-generate');
-const btnRefine = getEl('btn-refine');
-const btnEdit = getEl('btn-edit');
-const actionButtonsStack = getEl('action-buttons-stack');
-const btnInterrupt = getEl('btn-interrupt');
-const progressText = btnInterrupt ? btnInterrupt.querySelector('.progress-text') : null;
-
-const refIndicator = getEl('ref-indicator');
-
-const retryBtn = getEl('retry-btn');
-const infoSeed = getEl('info-seed');
-const infoPrompt = getEl('info-prompt');
-
-
-const spToggle = getEl('sp-toggle');
-const spContent = getEl('sp-content');
-const spJson = getEl('sp-json');
-const spToggleIcon = spToggle ? spToggle.querySelector('.vgl-toggle-icon') : null;
-
-const spPreviewDialog = getEl('sp-preview-dialog');
-const spPreviewEditor = getEl('sp-preview-editor');
-const spPreviewGenerate = getEl('sp-preview-generate');
-const spPreviewCancel = getEl('sp-preview-cancel');
-
-// API Key Warning Dialog
-const apiKeyWarningDialog = getEl('api-key-warning-dialog');
-const apiKeyWarningGo = getEl('api-key-warning-go');
-const apiKeyWarningClose = getEl('api-key-warning-close');
-
-apiKeyWarningGo?.addEventListener('click', () => {
-    apiKeyWarningDialog?.close();
-    const advanced = document.querySelector('.prompt-advanced-details');
-    if (advanced) advanced.open = true;
-    apiKeyInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    apiKeyInput?.focus();
-});
-apiKeyWarningClose?.addEventListener('click', () => apiKeyWarningDialog?.close());
-
-const globalConsoleBtn = getEl('global-console-btn');
-
-const exportStarredBtn = getEl('export-starred-btn');
-
+// ---- UI Element References (Populated after render) ----
+let projectSelect;
+let newProjectBtn;
+let deleteProjectBtn;
+let newProjectDialog;
+let newProjectName;
+let welcomeNewBtn;
+let apiKeyInput;
+let apiKeyToggle;
+let promptInput;
+let negativePromptInput;
+let imageCountSelect;
+let aspectRatioSelect;
+let resolutionSelect;
+let seedInput;
+let liteModeToggle;
+let liteQuickBtn;
+let modContentToggle;
+let modInputToggle;
+let modOutputToggle;
+let previewSpCheckbox;
+let imageUpload;
+let btnGenerate;
+let btnRefine;
+let btnEdit;
+let btnInterrupt;
+let progressText;
+let promptBarCollapseBtn;
+let promptBar;
+let uploadBtnText;
+let uploadPreviewWrap;
+let uploadPreview;
+let clearUploadBtn;
 let uploadedImageBase64 = null;
+let refIndicator;
+let promptExpandBtn;
+let promptExpandEditor;
+let promptExpandDialog;
+let promptExpandDone;
+let promptExpandCancel;
+
+
+let actionButtonsStack;
+let retryBtn;
+let infoSeed;
+let infoPrompt;
+let spToggle;
+let spContent;
+let spJson;
+let spToggleIcon;
+let spPreviewDialog;
+let spPreviewEditor;
+let spPreviewGenerate;
+let spPreviewCancel;
+let apiKeyWarningDialog;
+let apiKeyWarningGo;
+let apiKeyWarningClose;
+let globalConsoleBtn;
+let exportStarredBtn;
+let clearStarredBtn;
+let storageIndicatorBtn;
+let storageBanner;
+let storageBannerTitle;
+let storageBannerDesc;
+let storagePickBtn;
+let storageSkipBtn;
+let storageBannerClose;
+let storageIndicatorName;
+
+
+/** Handle generating new images (Text-to-Image). */
+async function onGenerateClick() {
+    if (!promptInput) return;
+    const prompt = promptInput.value.trim();
+    if (!prompt) { showToast('Please enter a prompt.'); return; }
+    
+    const count = parseInt(imageCountSelect?.value || '1', 10);
+    const ratio = aspectRatioSelect?.value || '1:1';
+    const seed = seedInput?.value ? parseInt(seedInput.value, 10) : null;
+    
+    try {
+        await generateImage(prompt, seed, count, {
+            aspect_ratio: ratio,
+            negative_prompt: negativePromptInput?.value || '',
+            lite: liteModeToggle?.checked || false,
+            mod_content: modContentToggle?.checked || false,
+            mod_input: modInputToggle?.checked || false,
+            mod_output: modOutputToggle?.checked || false
+        });
+    } catch (err) {
+        showToast('Generation failed: ' + err.message);
+    }
+}
+
+/** Handle refining the currently selected image (Img-to-Img + VGL). */
+async function onRefineClick() {
+    const featured = state.getFeaturedImage();
+    if (!featured) return;
+    
+    const prompt = promptInput?.value.trim() || featured.prompt;
+    const count = parseInt(imageCountSelect?.value || '1', 10);
+    const seed = seedInput?.value ? parseInt(seedInput.value, 10) : null;
+
+    try {
+        await generateImage(prompt, seed, count, {
+            mode: 'refine',
+            parentImageId: featured.id,
+            structured_prompt: featured.structured_prompt,
+            lite: liteModeToggle?.checked || false,
+            mod_content: modContentToggle?.checked || false,
+            mod_input: modInputToggle?.checked || false,
+            mod_output: modOutputToggle?.checked || false
+        });
+    } catch (err) {
+        showToast('Refinement failed: ' + err.message);
+    }
+}
+
+/** Handle editing/modifying the selected image. */
+async function onEditClick() {
+    const featured = state.getFeaturedImage();
+    const sourceImage = uploadedImageBase64 || featured?.base64;
+    if (!sourceImage) { showToast('Select an image or upload one to edit.'); return; }
+    
+    const prompt = promptInput?.value.trim();
+    if (!prompt) { showToast('Please enter an instruction (e.g., "Change the sky to sunset").'); return; }
+
+    state.setLoading(true, 'Editing image…');
+    try {
+        const result = await api.edit(prompt, sourceImage, null, {
+            mod_content: modContentToggle?.checked || false,
+            mod_input: modInputToggle?.checked || false,
+            mod_output: modOutputToggle?.checked || false
+        });
+        
+        const thumbnail = await createThumbnail(result.base64, 200);
+        await state.addImage(
+            { ...result, thumbnail }, 
+            prompt, 
+            'edit', 
+            generateUUID(), 
+            featured?.id
+        );
+        showToast('✓ Image edited!');
+    } catch (err) {
+        showToast('Edit failed: ' + err.message);
+    } finally {
+        state.setLoading(false);
+    }
+}
+
+function setupActionHandlers() {
+    btnGenerate?.addEventListener('click', onGenerateClick);
+    btnRefine?.addEventListener('click', onRefineClick);
+    btnEdit?.addEventListener('click', onEditClick);
+    
+    // Auto-update buttons on project switch
+    state.on('projectChanged', updateActionButtonsState);
+}
+
+function initUI() {
+    projectSelect = getEl('project-select');
+    newProjectBtn = getEl('new-project-btn');
+    deleteProjectBtn = getEl('delete-project-btn');
+    newProjectDialog = getEl('new-project-dialog');
+    newProjectName = getEl('new-project-name');
+    welcomeNewBtn = getEl('welcome-new-btn');
+    apiKeyInput = getEl('api-key-input');
+    apiKeyToggle = getEl('api-key-toggle');
+
+    promptInput = getEl('prompt-input');
+    negativePromptInput = getEl('negative-prompt-input');
+    imageCountSelect = getEl('image-count-select');
+    aspectRatioSelect = getEl('aspect-ratio-select');
+    resolutionSelect = getEl('resolution-select');
+    seedInput = getEl('seed-input');
+
+    liteModeToggle = getEl('lite-mode-toggle');
+    liteQuickBtn = document.getElementById('lite-quick-btn');
+    modContentToggle = getEl('mod-content-toggle');
+    modInputToggle = getEl('mod-input-toggle');
+    modOutputToggle = getEl('mod-output-toggle');
+    previewSpCheckbox = getEl('preview-sp-checkbox');
+    imageUpload = getEl('image-upload');
+
+    btnGenerate = getEl('btn-generate');
+    btnRefine = getEl('btn-refine');
+    btnEdit = getEl('btn-edit');
+    btnInterrupt = getEl('btn-interrupt');
+    progressText = btnInterrupt ? btnInterrupt.querySelector('.progress-text') : null;
+
+    promptBarCollapseBtn = document.getElementById('prompt-bar-collapse-btn');
+    promptBar = document.getElementById('prompt-bar');
+
+    uploadBtnText = getEl('upload-btn-text');
+    uploadPreviewWrap = getEl('upload-preview-wrap');
+    uploadPreview = getEl('upload-preview');
+    clearUploadBtn = getEl('clear-upload-btn');
+    refIndicator = getEl('ref-indicator');
+
+    promptExpandBtn = getEl('prompt-expand-btn');
+    promptExpandEditor = getEl('prompt-expand-editor');
+    promptExpandDialog = getEl('prompt-expand-dialog');
+    promptExpandDone = getEl('prompt-expand-done');
+    promptExpandCancel = getEl('prompt-expand-cancel');
+
+    actionButtonsStack = getEl('action-buttons-stack');
+    retryBtn = getEl('retry-btn');
+    infoSeed = getEl('info-seed');
+    infoPrompt = getEl('info-prompt');
+
+    spToggle = getEl('sp-toggle');
+    spContent = getEl('sp-content');
+    spJson = getEl('sp-json');
+    spToggleIcon = spToggle ? spToggle.querySelector('.vgl-toggle-icon') : null;
+
+    spPreviewDialog = getEl('sp-preview-dialog');
+    spPreviewEditor = getEl('sp-preview-editor');
+    spPreviewGenerate = getEl('sp-preview-generate');
+    spPreviewCancel = getEl('sp-preview-cancel');
+
+    apiKeyWarningDialog = getEl('api-key-warning-dialog');
+    apiKeyWarningGo = getEl('api-key-warning-go');
+    apiKeyWarningClose = getEl('api-key-warning-close');
+    globalConsoleBtn = getEl('global-console-btn');
+    exportStarredBtn = getEl('export-starred-btn');
+    clearStarredBtn = getEl('clear-starred-btn');
+    storageIndicatorBtn = getEl('storage-indicator-btn');
+    storageBanner = getEl('storage-banner');
+    storageBannerTitle = getEl('storage-banner-title');
+    storageBannerDesc = getEl('storage-banner-desc');
+    storagePickBtn = getEl('storage-pick-btn');
+    storageSkipBtn = getEl('storage-skip-btn');
+    storageBannerClose = getEl('storage-banner-close');
+    storageIndicatorName = getEl('storage-indicator-name');
+
+    // Attach core UI listeners
+    promptInput?.addEventListener('input', updateActionButtonsState);
+    promptInput?.addEventListener('input', autoExpandPrompt);
+    promptInput?.addEventListener('keydown', (e) => {
+        if (e.shiftKey && e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            openPromptExpand();
+        }
+    });
+
+    promptBarCollapseBtn?.addEventListener('click', togglePromptBar);
+    promptExpandBtn?.addEventListener('click', openPromptExpand);
+    promptExpandDone?.addEventListener('click', commitPromptExpand);
+    promptExpandCancel?.addEventListener('click', () => promptExpandDialog.close());
+
+    promptExpandEditor?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            commitPromptExpand();
+        }
+    });
+    
+    // Switch listener logic for liteQuickBtn
+    if (liteQuickBtn) {
+        liteQuickBtn.addEventListener('click', () => {
+            const isNowActive = liteQuickBtn.classList.toggle('active');
+            if (liteModeToggle) liteModeToggle.checked = isNowActive;
+        });
+    }
+
+    imageUpload?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        uploadedImageBase64 = await fileToBase64(file);
+        if (uploadPreview) uploadPreview.src = uploadedImageBase64;
+        uploadPreviewWrap?.classList.remove('hidden');
+        if (uploadBtnText) uploadBtnText.textContent = '✓';
+        updateActionButtonsState();
+    });
+
+    clearUploadBtn?.addEventListener('click', () => {
+        uploadedImageBase64 = null;
+        if (imageUpload) imageUpload.value = '';
+        if (uploadPreview) uploadPreview.src = '';
+        uploadPreviewWrap?.classList.add('hidden');
+        if (uploadBtnText) uploadBtnText.textContent = '📎';
+        updateActionButtonsState();
+    });
+
+    apiKeyWarningGo?.addEventListener('click', () => {
+        apiKeyWarningDialog?.close();
+        const advanced = document.querySelector('.prompt-advanced-details');
+        if (advanced) advanced.open = true;
+        apiKeyInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        apiKeyInput?.focus();
+    });
+    apiKeyWarningClose?.addEventListener('click', () => apiKeyWarningDialog?.close());
+
+    // Project selection
+    projectSelect?.addEventListener('change', () => {
+        const id = projectSelect.value;
+        if (id) state.switchProject(id);
+    });
+
+    // New Project
+    newProjectBtn?.addEventListener('click', openNewProjectDialog);
+    welcomeNewBtn?.addEventListener('click', openNewProjectDialog);
+    newProjectDialog?.addEventListener('close', async () => {
+        if (newProjectDialog.returnValue === 'create' && newProjectName.value.trim()) {
+            await state.createProject(newProjectName.value.trim());
+            populateProjectSelect();
+        }
+    });
+
+    // Delete Project
+    deleteProjectBtn?.addEventListener('click', async () => {
+        const project = state.getActiveProject();
+        if (!project) return;
+        if (await confirm(`Delete project "${project.name}"? This cannot be undone.`)) {
+            await state.deleteProject(project.id);
+            populateProjectSelect();
+        }
+    });
+
+    // Export Starred
+    if (exportStarredBtn) exportStarredBtn.onclick = async () => {
+        if (exportStarredBtn.dataset.exporting) return;
+        exportStarredBtn.dataset.exporting = '1';
+        exportStarredBtn.disabled = true;
+        try {
+            const project = state.getActiveProject();
+            const starredImages = project?.images.filter(img => img.isStarred) || [];
+            if (!starredImages.length) {
+                showToast('No starred images in this project to export.');
+                return;
+            }
+            // ... (rest of export logic remains in its function or here)
+            // Wait, I will just call a helper or keep it inline if it's small.
+            // Actually I'll keep the logic as is.
+            await handleExportStarred(); 
+        } finally {
+            exportStarredBtn.dataset.exporting = '';
+            exportStarredBtn.disabled = false;
+        }
+    };
+
+    // Clear Starred
+    clearStarredBtn?.addEventListener('click', async () => {
+        const project = state.getActiveProject();
+        const starred = project?.images.filter(img => img.isStarred) || [];
+        if (!starred.length) {
+            showToast('No starred images to clear.');
+            return;
+        }
+        if (!(await confirm(`Unstar all ${starred.length} starred image${starred.length > 1 ? 's' : ''}?`))) return;
+        starred.forEach(img => state.toggleStar(img.id));
+        showToast(`Unstarred ${starred.length} image${starred.length > 1 ? 's' : ''}.`);
+    });
+
+    // API Key
+    apiKeyInput?.addEventListener('input', () => {
+        state.setApiKey(apiKeyInput.value);
+        updateActionButtonsState();
+    });
+    apiKeyToggle?.addEventListener('click', () => {
+        const isPassword = apiKeyInput.type === 'password';
+        if (apiKeyInput) apiKeyInput.type = isPassword ? 'text' : 'password';
+        apiKeyToggle.textContent = isPassword ? '🙈' : '👁';
+    });
+
+    apiKeyToggle?.addEventListener('click', () => {
+        const isPassword = apiKeyInput.type === 'password';
+        if (apiKeyInput) apiKeyInput.type = isPassword ? 'text' : 'password';
+        apiKeyToggle.textContent = isPassword ? '🙈' : '👁';
+    });
+
+    retryBtn?.addEventListener('click', () => {
+        state.clearError();
+        if (promptInput) promptInput.value = state.lastPrompt;
+        handleAction('generate');
+    });
+
+    infoSeed?.addEventListener('click', () => {
+        const img = state.getFeaturedImage();
+        if (img) copyToClipboard(String(img.seed), 'Seed copied!');
+    });
+
+    infoPrompt?.addEventListener('click', () => {
+        const img = state.getFeaturedImage();
+        if (img) copyToClipboard(img.prompt || '', 'Prompt copied!');
+    });
+
+    // Sidebar Toggle
+    document.getElementById('json-sidebar-header-toggle')?.addEventListener('click', () => {
+        const vglMount = document.getElementById('arc-vgl-mount');
+        if (!vglMount) return;
+        const isCollapsed = vglMount?.classList.toggle('collapsed');
+        const resizer = document.getElementById('resizer-json');
+        if (resizer) resizer.classList.toggle('hidden', isCollapsed);
+        updateHeaderToggleState();
+    });
+
+    // Storage Banner
+    storagePickBtn?.addEventListener('click', async () => {
+        storagePickBtn.disabled = true;
+        storagePickBtn.textContent = 'Opening…';
+        const ok = await state.setupStorage();
+        storagePickBtn.disabled = false;
+        storagePickBtn.textContent = 'Choose Folder';
+        if (!ok) showToast('No folder selected — try again.');
+    });
+    storageSkipBtn?.addEventListener('click', async () => {
+        await state.skipToLocalStorage();
+        localStorage.setItem('vgl-studio-banner-dismissed', '1');
+        updateStorageUI();
+    });
+    storageBannerClose?.addEventListener('click', () => {
+        localStorage.setItem('vgl-studio-banner-dismissed', '1');
+        storageBanner?.classList.add('hidden');
+    });
+
+
+    // Structured Prompt Panel
+    if (spToggle && spContent && spToggleIcon) {
+        spToggle.addEventListener('click', () => {
+            const isOpen = !spContent.classList.contains('hidden');
+            spContent.classList.toggle('hidden');
+            spToggleIcon.classList.toggle('open', !isOpen);
+        });
+    }
+
+    initVglInspector();
+
+    state.on('loadingChanged', () => {
+        const loadingOverlay = getEl('loading-overlay');
+        const loadingText = loadingOverlay?.querySelector('.loading-text');
+        if (loadingOverlay) {
+            loadingOverlay?.classList.toggle('hidden', !state.isLoading);
+            if (loadingText) loadingText.textContent = state.loadingText || 'Processing…';
+        }
+    });
+
+    globalConsoleBtn?.addEventListener('click', () => {
+        apiConsole.toggle();
+    });
+
+    setupActionHandlers();
+    autoExpandPrompt();
+}
+
+function togglePromptBar() {
+    if (promptBar) {
+        promptBar.classList.toggle('collapsed');
+    }
+}
+
+
+
 let currentAbortController = null;
 
 // ============================================================
@@ -201,6 +570,12 @@ let currentAbortController = null;
     core.ui.addContextButton('Upscale', () => showToast('Upscale Plugin Executed!'));
 
     initCanvas('arc-main-mount');
+    
+    // Now that mount points exist, render the Prompt Bar
+    new PromptBar('arc-prompt-mount').render();
+    
+    initUI(); // Select elements and attach basic listeners
+
     initGallery('arc-gallery-mount');
     initCompare();
     initResizers([
@@ -221,15 +596,6 @@ let currentAbortController = null;
 // ============================================================
 // STORAGE SETUP UI
 // ============================================================
-
-const storageBanner = document.getElementById('storage-banner');
-const storageBannerTitle = document.getElementById('storage-banner-title');
-const storageBannerDesc = document.getElementById('storage-banner-desc');
-const storagePickBtn = document.getElementById('storage-pick-btn');
-const storageSkipBtn = document.getElementById('storage-skip-btn');
-const storageBannerClose = document.getElementById('storage-banner-close');
-const storageIndicatorBtn = document.getElementById('storage-indicator-btn');
-const storageIndicatorName = document.getElementById('storage-indicator-name');
 
 /**
  * Reflect the current storageType in the UI:
@@ -297,39 +663,6 @@ state.on('storageReady', () => {
     updateActionButtonsState();
 });
 
-// "Choose Folder" button
-storagePickBtn?.addEventListener('click', async () => {
-    if (storagePickBtn) storagePickBtn.disabled = true;
-    storagePickBtn.textContent = 'Opening…';
-    const ok = await state.setupStorage();
-    if (storagePickBtn) storagePickBtn.disabled = false;
-    storagePickBtn.textContent = 'Choose Folder';
-    if (!ok) showToast('No folder selected — try again.');
-});
-
-// "Use Browser Storage" button
-storageSkipBtn?.addEventListener('click', async () => {
-    await state.skipToLocalStorage();
-    localStorage.setItem('vgl-studio-banner-dismissed', '1');
-    updateStorageUI();
-});
-
-// Dismiss (X) — remembers choice in localStorage so banner stays gone
-storageBannerClose?.addEventListener('click', () => {
-    localStorage.setItem('vgl-studio-banner-dismissed', '1');
-    storageBanner?.classList.add('hidden');
-});
-
-// Header folder indicator — clicking lets the user change the folder
-storageIndicatorBtn?.addEventListener('click', async () => {
-    if (!(await confirm('Change your storage folder? Your current projects will remain in the old folder.'))) return;
-    const ok = await state.setupStorage();
-    if (ok) {
-        updateStorageUI();
-        showToast('✓ Storage folder updated.');
-    }
-});
-
 // ============================================================
 // PROJECT MANAGEMENT
 // ============================================================
@@ -349,17 +682,6 @@ function populateProjectSelect() {
     });
 }
 
-projectSelect?.addEventListener('change', () => {
-    const id = projectSelect.value;
-    if (id) {
-        state.switchProject(id);
-        // updateJsonInspector() now handled by events in initialiser
-    }
-});
-
-newProjectBtn?.addEventListener('click', openNewProjectDialog);
-welcomeNewBtn?.addEventListener('click', openNewProjectDialog);
-
 function openNewProjectDialog() {
     if (!newProjectDialog) return;
     if (newProjectName) newProjectName.value = '';
@@ -370,114 +692,55 @@ function openNewProjectDialog() {
     }
 }
 
-newProjectDialog?.addEventListener('close', async () => {
-    if (newProjectDialog.returnValue === 'create' && newProjectName.value.trim()) {
-        await state.createProject(newProjectName.value.trim());
-        populateProjectSelect();
-    }
-});
-
-if (deleteProjectBtn) deleteProjectBtn?.addEventListener('click', async () => {
+async function handleExportStarred() {
     const project = state.getActiveProject();
-    if (!project) return;
-    if (await confirm(`Delete project "${project.name}"? This cannot be undone.`)) {
-        await state.deleteProject(project.id);
-        populateProjectSelect();
+    const starredImages = project?.images.filter(img => img.isStarred) || [];
+
+    /** Return full base64 for an image — loads from disk in FS mode. */
+    async function resolveBase64(img) {
+        if (img.base64) return img.base64;
+        if (state.storageType === 'fs') {
+            const b64 = await dataDB.getImageBase64(img.id);
+            if (b64) return b64;
+        }
+        return null;
     }
-});
 
-if (exportStarredBtn) exportStarredBtn.onclick = async () => {
-    if (exportStarredBtn.dataset.exporting) return;
-    exportStarredBtn.dataset.exporting = '1';
-    if (exportStarredBtn) exportStarredBtn.disabled = true;
+    const zip = new JSZip();
+    const loaders = starredImages.map(async (img) => {
+        const base = generateFilename(img, project.name, project);
+        const txtBase = generateTxtFilename(img, project.name, project);
+        const b64 = await resolveBase64(img);
+        const txtContent = generateTxtReport(img, project);
 
-    try {
-        const project = state.getActiveProject();
-        const starredImages = project?.images.filter(img => img.isStarred) || [];
-
-        if (!starredImages.length) {
-            showToast('No starred images in this project to export.');
-            return;
-        }
-
-        /** Return full base64 for an image — loads from disk in FS mode. */
-        async function resolveBase64(img) {
-            if (img.base64) return img.base64;
-            if (state.storageType === 'fs') {
-                const b64 = await dataDB.getImageBase64(img.id);
-                if (b64) return b64;
-            }
-            return null;
-        }
-
-        showToast(`Preparing ${starredImages.length} image${starredImages.length > 1 ? 's' : ''}…`);
-
-        // Build a zip with all starred images + sidecar files
-        const zip = new JSZip();
-        let count = 0;
-
-        for (const img of starredImages) {
-            const base = generateFilename(img, project.name, project);
-            const txtBase = generateTxtFilename(img, project.name, project);
-            const b64 = await resolveBase64(img);
-            if (!b64) continue;
-
-            // PNG — strip data URL header and decode to binary
+        if (b64) {
             const raw = b64.replace(/^data:image\/\w+;base64,/, '');
             zip.file(base + '.png', raw, { base64: true });
-
-            // VGL JSON sidecar
-            if (img.structured_prompt) {
-                let spObj;
-                try { spObj = typeof img.structured_prompt === 'string' ? JSON.parse(img.structured_prompt) : img.structured_prompt; }
-                catch { spObj = img.structured_prompt; }
-                zip.file(base + '.json', JSON.stringify(spObj, null, 2));
-            }
-
-            // Text report
-            zip.file(txtBase + '.txt', generateTxtReport(img, project));
-            count++;
         }
+        if (txtContent) {
+            zip.file(txtBase + '.txt', txtContent);
+        }
+        if (img.structured_prompt) {
+            const spObj = typeof img.structured_prompt === 'string' ? JSON.parse(img.structured_prompt) : img.structured_prompt;
+            zip.file(base + '.json', JSON.stringify(spObj, null, 2));
+        }
+    });
 
-        if (!count) { showToast('⚠️ Could not load any images to export.'); return; }
+    await Promise.all(loaders);
 
-        // Generate zip blob and trigger single download
-        const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
-        const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const zipFilename = `${projectSlug}_starred_${ts}.zip`;
+    const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+    const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const zipFilename = `${projectSlug}_starred_${ts}.zip`;
 
-        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-        const url = URL.createObjectURL(zipBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = zipFilename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-
-        showToast(`✓ Downloaded ${count} image${count !== 1 ? 's' : ''} as ${zipFilename}`);
-    } finally {
-        delete exportStarredBtn.dataset.exporting;
-        if (exportStarredBtn) exportStarredBtn.disabled = false;
-    }
-};
-
-// Clear Starred button
-const clearStarredBtn = document.getElementById('clear-starred-btn');
-if (clearStarredBtn) clearStarredBtn?.addEventListener('click', async () => {
-    const project = state.getActiveProject();
-    const starred = project?.images.filter(img => img.isStarred) || [];
-    if (!starred.length) {
-        showToast('No starred images to clear.');
-        return;
-    }
-    if (!(await confirm(`Unstar all ${starred.length} starred image${starred.length > 1 ? 's' : ''}?`))) return;
-    starred.forEach(img => state.toggleStar(img.id));
-    showToast(`Unstarred ${starred.length} image${starred.length > 1 ? 's' : ''}.`);
-});
-
-
+    const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = zipFilename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast(`Exported ${starredImages.length} images!`);
+}
 
 state.on('projectChanged', () => {
     populateProjectSelect();
@@ -520,51 +783,21 @@ function loadApiKey() {
     }
 }
 
-apiKeyInput?.addEventListener('input', () => {
-    state.setApiKey(apiKeyInput.value);
-    updateActionButtonsState();
-});
 
-
-
-document.getElementById('json-sidebar-header-toggle')?.addEventListener('click', () => {
-    const vglMount = document.getElementById('arc-vgl-mount');
-    if (!vglMount) return;
-    const isCollapsed = vglMount?.classList.toggle('collapsed');
-    const resizer = document.getElementById('resizer-json');
-    if (resizer) resizer.classList.toggle('hidden', isCollapsed);
-    if (typeof jsonSidebarClose !== 'undefined' && jsonSidebarClose) {
-        if (typeof jsonSidebarClose !== 'undefined' && jsonSidebarClose) jsonSidebarClose.textContent = isCollapsed ? '◀' : '▶';
-    }
-    updateHeaderToggleState();
-});
-
-apiKeyToggle?.addEventListener('click', () => {
-    const isPassword = apiKeyInput.type === 'password';
-    if (apiKeyInput) apiKeyInput.type = isPassword ? 'text' : 'password';
-    apiKeyToggle.textContent = isPassword ? '🙈' : '👁';
-});
 
 
 // ============================================================
 // PROMPT AUTO-EXPAND + EXPAND MODAL
 // ============================================================
 
-const promptExpandBtn    = document.getElementById('prompt-expand-btn');
-const promptExpandDialog = document.getElementById('prompt-expand-dialog');
-const promptExpandEditor = document.getElementById('prompt-expand-editor');
-const promptExpandDone   = document.getElementById('prompt-expand-done');
-const promptExpandCancel = document.getElementById('prompt-expand-cancel');
+
 
 /** Resize promptInput to fit its content, capped at max-height from CSS. */
 function autoExpandPrompt() {
+    if (!promptInput) return;
     promptInput.style.height = 'auto';
     promptInput.style.height = promptInput.scrollHeight + 'px';
 }
-
-promptInput?.addEventListener('input', autoExpandPrompt);
-// Initial size-to-content in case a value is pre-filled
-autoExpandPrompt();
 
 /** Open the full-screen prompt editor. */
 function openPromptExpand() {
@@ -583,35 +816,28 @@ function commitPromptExpand() {
     promptExpandDialog.close();
 }
 
-promptExpandBtn?.addEventListener('click', openPromptExpand);
+// Shift+Enter handled in initUI
 
-// Shift+Enter on the main textarea opens the modal
-promptInput?.addEventListener('keydown', (e) => {
-    if (e.shiftKey && e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        openPromptExpand();
-    }
-});
 
 // Ctrl+Enter inside the modal commits
-promptExpandEditor?.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+
+
+// Collapse handled in initUI
+
+
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        commitPromptExpand();
+        togglePromptBar();
     }
 });
 
-promptExpandDone?.addEventListener('click', commitPromptExpand);
-promptExpandCancel?.addEventListener('click', () => promptExpandDialog.close());
+// Input listener handled in initUI
 
-// ============================================================
-// ACTION BUTTONS STATE
-// ============================================================
-
-promptInput?.addEventListener('input', updateActionButtonsState);
 
 
 function updateActionButtonsState() {
+    if (!promptInput) return;
     const hasProject = !!state.getActiveProject();
     const hasApiKey = !!state.getApiKey();
     const hasPrompt = promptInput.value.trim().length > 0;
@@ -628,13 +854,25 @@ function updateActionButtonsState() {
     // Always enable Generate/Refine/Edit if we have a project,
     // so we can give constructive feedback on click if API key or Prompt is missing.
     if (btnGenerate) btnGenerate.disabled = false;
-    if (btnRefine) btnRefine.disabled = false;
-    if (btnEdit) btnEdit.disabled = false;
+    
+    // Logic for Refine button: Only visible if featured image has a VGL (structured_prompt)
+    if (btnRefine) {
+        const hasVGL = hasFeatured && !!state.getFeaturedImage()?.structured_prompt;
+        btnRefine.style.display = hasVGL ? 'inline-flex' : 'none';
+        btnRefine.disabled = !hasVGL;
+    }
+
+    // Logic for Edit button: Visible if any image is selected or an image was uploaded
+    if (btnEdit) {
+        const canEdit = hasFeatured || uploadedImageBase64;
+        btnEdit.style.display = canEdit ? 'inline-flex' : 'none';
+        btnEdit.disabled = !canEdit;
+    }
 
     // Visual cues only
     btnGenerate?.classList.toggle('dimmed', !hasPrompt || !hasApiKey);
-    btnRefine?.classList.toggle('dimmed', !hasPrompt || !hasApiKey || !hasFeatured);
-    btnEdit?.classList.toggle('dimmed', !hasPrompt || !hasApiKey || (!hasFeatured && !uploadedImageBase64));
+    if (btnRefine) btnRefine.classList.toggle('dimmed', !hasPrompt || !hasApiKey);
+    if (btnEdit) btnEdit.classList.toggle('dimmed', !hasPrompt || !hasApiKey);
 
     // Update Reference Indicator visibility
     if (hasFeatured) {
@@ -652,29 +890,8 @@ state.on('featuredChanged', () => {
     // unless the user has manually typed a value.
 });
 
-// ============================================================
-// IMAGE UPLOAD
-// ============================================================
+// Upload listeners handled in initUI
 
-imageUpload?.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    uploadedImageBase64 = await fileToBase64(file);
-    uploadPreview.src = uploadedImageBase64;
-    uploadPreviewWrap?.classList.remove('hidden');
-    uploadBtnText.textContent = '✓';
-    updateActionButtonsState();
-});
-
-clearUploadBtn?.addEventListener('click', () => {
-    uploadedImageBase64 = null;
-    imageUpload.value = '';
-    uploadPreview.src = '';
-    uploadPreviewWrap?.classList.add('hidden');
-    uploadBtnText.textContent = '📎';
-    updateActionButtonsState();
-});
 
 // ---- Interrupt ----
 if (btnInterrupt) {
@@ -1100,12 +1317,7 @@ async function handleStructuredPromptPreview(prompt, imageCount, options, mode =
 }
 
 // Retry button
-retryBtn?.addEventListener('click', () => {
-    state.clearError();
-    if (promptInput) promptInput.value = state.lastPrompt;
-    // Default to generate if we can't determine the last mode
-    handleAction('generate');
-});
+
 
 // ============================================================
 // IMAGE INFO BAR (copy actions)
@@ -1115,15 +1327,7 @@ retryBtn?.addEventListener('click', () => {
 // IMAGE INFO BAR (copy/download actions)
 // ============================================================
 
-infoSeed?.addEventListener('click', () => {
-    const img = state.getFeaturedImage();
-    if (img) copyToClipboard(String(img.seed), 'Seed copied!');
-});
 
-infoPrompt?.addEventListener('click', () => {
-    const img = state.getFeaturedImage();
-    if (img) copyToClipboard(img.prompt || '', 'Prompt copied!');
-});
 
 // ============================================================
 // GALLERY NAVIGATION (canvas footer arrows)
@@ -1218,13 +1422,7 @@ function initCanvasNav() {
 // STRUCTURED PROMPT PANEL
 // ============================================================
 
-if (spToggle && spContent && spToggleIcon) {
-    spToggle?.addEventListener('click', () => {
-        const isOpen = !spContent?.classList.contains('hidden');
-        spContent?.classList.toggle('hidden');
-        spToggleIcon?.classList.toggle('open', !isOpen);
-    });
-}
+
 
 // ============================================================
 // VGL INSPECTOR INITIALIZATION
@@ -1276,53 +1474,8 @@ function initVglInspector() {
         vglInspectorInstance.updateData(parsedData, oldData);
     }
 
-    state.on('featuredChanged', syncVgl);
-    state.on('compareChanged', syncVgl);
-
-    // Initial sync
     syncVgl();
 }
 
-initVglInspector();
 
-// ============================================================
-// SHORTCUT BINDINGS
-// ============================================================
 
-// Old JSON Sidebar features migrated to core.VglInspector
-
-// ============================================================
-// LOADING STATE UI
-// ============================================================
-
-state.on('loadingChanged', () => {
-    const loadingOverlay = getEl('loading-overlay');
-    const loadingText = loadingOverlay?.querySelector('.loading-text');
-    if (loadingOverlay) {
-        loadingOverlay?.classList.toggle('hidden', !state.isLoading);
-        if (loadingText) loadingText.textContent = state.loadingText || 'Processing…';
-    }
-});
-// ============================================================
-// GLOBAL CONSOLE HOOK
-// ============================================================
-if (globalConsoleBtn) {
-    globalConsoleBtn?.addEventListener('click', () => {
-        apiConsole.toggle();
-    });
-}
-
-// ============================================================
-// APP STARTUP / INIT
-// ============================================================
-
-setTimeout(() => {
-    // 1. Initial UI update
-    updateActionButtonsState();
-
-    // 2. Prompt for API key if missing
-    if (!state.getApiKey()) {
-        const dialog = document.getElementById('settings-dialog');
-        if (dialog) dialog.showModal();
-    }
-}, 100);

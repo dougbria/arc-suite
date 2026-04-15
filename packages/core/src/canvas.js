@@ -81,7 +81,7 @@ const CANVAS_HTML = `
             <div class="zoom-controls">
               <span id="zoom-indicator" class="zoom-indicator">Fit</span>
               <button id="zoom-fit-btn" class="zoom-btn zoom-btn-active" title="Fit (F)">Fit</button>
-              <button id="zoom-100-btn" class="zoom-btn" title="100% (1)">100%</button>
+              <button id="zoom-100-btn" class="zoom-btn" title="100% (H)">100%</button>
             </div>
           </div>
           <div class="info-actions">
@@ -109,6 +109,7 @@ const CANVAS_HTML = `
         </div>
       </div>
     </div>
+    <div id="arc-prompt-mount"></div>
   </section>
 `;
 
@@ -156,7 +157,7 @@ export function initCanvas(mountPointId = null) {
         if (e.key === 'f' || e.key === 'F') {
             e.preventDefault();
             zoomToFit();
-        } else if (e.key === '1') {
+        } else if (e.key === 'h' || e.key === 'H') {
             e.preventDefault();
             zoomTo100();
         }
@@ -510,16 +511,17 @@ function updateView() {
         return;
     }
 
-    if (project.images.length === 0) {
-        // Empty project — show welcome with project context
-        elements.welcomeScreen.classList.remove('hidden');
-        elements.imageViewer.classList.add('hidden');
-        return;
-    }
-
-    // Has images — show viewer
+    // Has a project (even if 0 images) — hide welcome
     elements.welcomeScreen.classList.add('hidden');
     elements.imageViewer.classList.remove('hidden');
+
+    if (project.images.length === 0) {
+        // Empty project — show viewer but it will be empty
+        // We ensure featuredImageId is null
+        state.featuredImageId = null;
+        updateFeaturedImage();
+        return;
+    }
 
     // If no featured image, auto-select the first
     if (!state.featuredImageId) {
