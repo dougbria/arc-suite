@@ -1,14 +1,15 @@
 /* ============================================================
-   app.js — Main application controller
+   app.js - Main application controller
    Wires together all modules and event handlers.
    [REFRESH_CHECK_TAG_001]
    ============================================================ */
 
 import { 
-    core, State as stateEngine, Canvas, Gallery, CardJsonEditor, apiConsole,
-    api, Utils, Compare, Resizer, Actions, PromptBar, VglInspector
+    core, State as stateEngine, Canvas, Gallery, apiConsole,
+    api, Utils, Compare, Resizer, PromptBar, VglInspector
 } from '@arc/core';
 import JSZip from 'jszip';
+import { GenerationManager } from './GenerationManager.js';
 
 
 const {
@@ -28,13 +29,6 @@ const {
     writeFilesToHandle,
     saveFilesToFolder
 } = Utils;
-
-const {
-    generateImage,
-    enhanceImage,
-    removeBackground,
-    eraseObject
-} = Actions;
 
 // Get state singleton
 const state = stateEngine.default || stateEngine;
@@ -59,40 +53,6 @@ window?.addEventListener('unhandledrejection', (e) => {
 // STRUCTURED PROMPT PASSTHROUGH DETECTION
 // ============================================================
 
-/**
- * The minimum set of top-level keys required to treat a JSON object
- * as a pre-formed structured prompt (per the SP schema).
- */
-const SP_REQUIRED_KEYS = [
-    'short_description',
-    'objects',
-    'lighting',
-    'aesthetics',
-    'photographic_characteristics'
-];
-
-/**
- * Try to parse `text` as a structured prompt JSON.
- * Returns the parsed object if it matches the schema requirements,
- * or null if it's not a valid / recognised SP JSON.
- *
- * @param {string} text
- * @returns {Object|null}
- */
-function parseAsStructuredPrompt(text) {
-    if (!text || typeof text !== 'string') return null;
-    const trimmed = text.trim();
-    if (!trimmed.startsWith('{')) return null; // fast-exit for plain prompts
-    try {
-        const parsed = JSON.parse(trimmed);
-        if (typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-        const hasAllRequired = SP_REQUIRED_KEYS.every(k => Object.prototype.hasOwnProperty.call(parsed, k));
-        return hasAllRequired ? parsed : null;
-    } catch {
-        return null; // not valid JSON
-    }
-}
-
 // ---- DOM Elements ----
 const getEl = (id) => {
     const el = document.getElementById(id);
@@ -101,9 +61,6 @@ const getEl = (id) => {
 };
 
 // ---- UI Element References (Populated after render) ----
-let projectSelect;
-let newProjectBtn;
-let deleteProjectBtn;
 let newProjectDialog;
 let newProjectName;
 let welcomeNewBtn;
@@ -111,10 +68,11 @@ let apiKeyInput;
 let apiKeyToggle;
 let promptInput;
 let negativePromptInput;
-let imageCountSelect;
-let aspectRatioSelect;
+let imageCountBtn;
+let aspectRatioBtn;
 let resolutionSelect;
 let seedInput;
+let seedPopoverBtn;
 let liteModeToggle;
 let liteQuickBtn;
 let modContentToggle;
@@ -125,6 +83,7 @@ let imageUpload;
 let btnGenerate;
 let btnRefine;
 let btnEdit;
+let btnExpand;
 let btnInterrupt;
 let progressText;
 let promptBarCollapseBtn;
@@ -133,6 +92,7 @@ let uploadBtnText;
 let uploadPreviewWrap;
 let uploadPreview;
 let clearUploadBtn;
+let generationManager = null;
 let uploadedImageBase64 = null;
 let refIndicator;
 let promptExpandBtn;
@@ -168,114 +128,33 @@ let storagePickBtn;
 let storageSkipBtn;
 let storageBannerClose;
 let storageIndicatorName;
+let settingsBtn;
+let settingsDialog;
+let settingsBriaKey;
+let settingsCloseBtn;
+let settingsStorageStatus;
+let settingsPickFolderBtn;
+let settingsUseBrowserBtn;
+let jsonSidebarToggle;
+
+let vglInspector;
 
 
-/** Handle generating new images (Text-to-Image). */
-async function onGenerateClick() {
-    if (!promptInput) return;
-    const prompt = promptInput.value.trim();
-    if (!prompt) { showToast('Please enter a prompt.'); return; }
-    
-    const count = parseInt(imageCountSelect?.value || '1', 10);
-    const ratio = aspectRatioSelect?.value || '1:1';
-    const seed = seedInput?.value ? parseInt(seedInput.value, 10) : null;
-    
-    try {
-        await generateImage(prompt, seed, count, {
-            aspect_ratio: ratio,
-            negative_prompt: negativePromptInput?.value || '',
-            lite: liteModeToggle?.checked || false,
-            mod_content: modContentToggle?.checked || false,
-            mod_input: modInputToggle?.checked || false,
-            mod_output: modOutputToggle?.checked || false
-        });
-    } catch (err) {
-        showToast('Generation failed: ' + err.message);
-    }
-}
-
-/** Handle refining the currently selected image (Img-to-Img + VGL). */
-async function onRefineClick() {
-    const featured = state.getFeaturedImage();
-    if (!featured) return;
-    
-    const prompt = promptInput?.value.trim() || featured.prompt;
-    const count = parseInt(imageCountSelect?.value || '1', 10);
-    const seed = seedInput?.value ? parseInt(seedInput.value, 10) : null;
-
-    try {
-        await generateImage(prompt, seed, count, {
-            mode: 'refine',
-            parentImageId: featured.id,
-            structured_prompt: featured.structured_prompt,
-            lite: liteModeToggle?.checked || false,
-            mod_content: modContentToggle?.checked || false,
-            mod_input: modInputToggle?.checked || false,
-            mod_output: modOutputToggle?.checked || false
-        });
-    } catch (err) {
-        showToast('Refinement failed: ' + err.message);
-    }
-}
-
-/** Handle editing/modifying the selected image. */
-async function onEditClick() {
-    const featured = state.getFeaturedImage();
-    const sourceImage = uploadedImageBase64 || featured?.base64;
-    if (!sourceImage) { showToast('Select an image or upload one to edit.'); return; }
-    
-    const prompt = promptInput?.value.trim();
-    if (!prompt) { showToast('Please enter an instruction (e.g., "Change the sky to sunset").'); return; }
-
-    state.setLoading(true, 'Editing image…');
-    try {
-        const result = await api.edit(prompt, sourceImage, null, {
-            mod_content: modContentToggle?.checked || false,
-            mod_input: modInputToggle?.checked || false,
-            mod_output: modOutputToggle?.checked || false
-        });
-        
-        const thumbnail = await createThumbnail(result.base64, 200);
-        await state.addImage(
-            { ...result, thumbnail }, 
-            prompt, 
-            'edit', 
-            generateUUID(), 
-            featured?.id
-        );
-        showToast('✓ Image edited!');
-    } catch (err) {
-        showToast('Edit failed: ' + err.message);
-    } finally {
-        state.setLoading(false);
-    }
-}
-
-function setupActionHandlers() {
-    btnGenerate?.addEventListener('click', onGenerateClick);
-    btnRefine?.addEventListener('click', onRefineClick);
-    btnEdit?.addEventListener('click', onEditClick);
-    
-    // Auto-update buttons on project switch
-    state.on('projectChanged', updateActionButtonsState);
-}
+// Generation handlers are centralized in handleAction() at the bottom of the file
 
 function initUI() {
-    projectSelect = getEl('project-select');
-    newProjectBtn = getEl('new-project-btn');
-    deleteProjectBtn = getEl('delete-project-btn');
     newProjectDialog = getEl('new-project-dialog');
     newProjectName = getEl('new-project-name');
     welcomeNewBtn = getEl('welcome-new-btn');
-    apiKeyInput = getEl('api-key-input');
-    apiKeyToggle = getEl('api-key-toggle');
+    welcomeNewBtn = getEl('welcome-new-btn');
 
     promptInput = getEl('prompt-input');
     negativePromptInput = getEl('negative-prompt-input');
-    imageCountSelect = getEl('image-count-select');
-    aspectRatioSelect = getEl('aspect-ratio-select');
+    imageCountBtn = getEl('image-count-btn');
+    aspectRatioBtn = getEl('aspect-ratio-btn');
     resolutionSelect = getEl('resolution-select');
     seedInput = getEl('seed-input');
+    seedPopoverBtn = getEl('seed-popover-btn');
 
     liteModeToggle = getEl('lite-mode-toggle');
     liteQuickBtn = document.getElementById('lite-quick-btn');
@@ -288,6 +167,7 @@ function initUI() {
     btnGenerate = getEl('btn-generate');
     btnRefine = getEl('btn-refine');
     btnEdit = getEl('btn-edit');
+    btnExpand = getEl('btn-expand');
     btnInterrupt = getEl('btn-interrupt');
     progressText = btnInterrupt ? btnInterrupt.querySelector('.progress-text') : null;
 
@@ -299,6 +179,12 @@ function initUI() {
     uploadPreview = getEl('upload-preview');
     clearUploadBtn = getEl('clear-upload-btn');
     refIndicator = getEl('ref-indicator');
+    settingsDialog = getEl('settings-dialog');
+    settingsBriaKey = getEl('settings-bria-key');
+    settingsCloseBtn = getEl('settings-close-btn');
+    settingsStorageStatus = getEl('settings-storage-status');
+    settingsPickFolderBtn = getEl('settings-pick-folder-btn');
+    settingsUseBrowserBtn = getEl('settings-use-browser-btn');
 
     promptExpandBtn = getEl('prompt-expand-btn');
     promptExpandEditor = getEl('prompt-expand-editor');
@@ -335,6 +221,8 @@ function initUI() {
     storageSkipBtn = getEl('storage-skip-btn');
     storageBannerClose = getEl('storage-banner-close');
     storageIndicatorName = getEl('storage-indicator-name');
+
+    // VGL Inspector and Sidebar logic is handled in startup via initVglInspector()
 
     // Attach core UI listeners
     promptInput?.addEventListener('input', updateActionButtonsState);
@@ -388,36 +276,73 @@ function initUI() {
 
     apiKeyWarningGo?.addEventListener('click', () => {
         apiKeyWarningDialog?.close();
-        const advanced = document.querySelector('.prompt-advanced-details');
-        if (advanced) advanced.open = true;
-        apiKeyInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        apiKeyInput?.focus();
+        if (settingsDialog) {
+            if (settingsBriaKey) settingsBriaKey.value = state.getApiKey() || '';
+            settingsDialog.showModal();
+        }
     });
     apiKeyWarningClose?.addEventListener('click', () => apiKeyWarningDialog?.close());
 
-    // Project selection
-    projectSelect?.addEventListener('change', () => {
-        const id = projectSelect.value;
-        if (id) state.switchProject(id);
+    // Settings logic
+    settingsBtn?.addEventListener('click', () => {
+        if (settingsBriaKey) settingsBriaKey.value = state.getApiKey() || '';
+        settingsDialog?.showModal();
+    });
+    const toolbar = document.getElementById('app-toolbar');
+    toolbar?.addEventListener('action', async (e) => {
+        const { type, id, mode } = e.detail;
+        switch (type) {
+            case 'new-project':
+                openNewProjectDialog();
+                break;
+            case 'delete-project':
+                const project = state.getActiveProject();
+                if (!project) return;
+                if (await confirm(`Delete project "${project.name}"? This cannot be undone.`)) {
+                    await state.deleteProject(project.id);
+                }
+                break;
+            case 'open-settings':
+                if (settingsDialog) {
+                    if (settingsBriaKey) settingsBriaKey.value = state.getApiKey() || '';
+                    if (settingsDialog.showModal) settingsDialog.showModal();
+                    else settingsDialog.setAttribute('open', '');
+                }
+                break;
+            case 'change-storage':
+                await state.setupStorage();
+                break;
+            case 'toggle-vgl-sidebar':
+                toggleJsonSidebar();
+                break;
+            case 'switch-mode':
+                console.log('Mode switch requested:', mode);
+                break;
+        }
     });
 
-    // New Project
-    newProjectBtn?.addEventListener('click', openNewProjectDialog);
+    settingsCloseBtn?.addEventListener('click', () => settingsDialog?.close());
+
+    settingsBriaKey?.addEventListener('input', (e) => {
+        state.setApiKey(e.target.value.trim());
+    });
+
+    storageIndicatorBtn?.addEventListener('click', async () => {
+        try {
+            await state.setupStorage();
+            updateStorageUI();
+        } catch (err) {
+            showToast('Failed to pick folder: ' + err.message);
+        }
+    });
+
+    // (Storage buttons managed within Settings modal)
+
+    // New Project Dialog
     welcomeNewBtn?.addEventListener('click', openNewProjectDialog);
     newProjectDialog?.addEventListener('close', async () => {
         if (newProjectDialog.returnValue === 'create' && newProjectName.value.trim()) {
             await state.createProject(newProjectName.value.trim());
-            populateProjectSelect();
-        }
-    });
-
-    // Delete Project
-    deleteProjectBtn?.addEventListener('click', async () => {
-        const project = state.getActiveProject();
-        if (!project) return;
-        if (await confirm(`Delete project "${project.name}"? This cannot be undone.`)) {
-            await state.deleteProject(project.id);
-            populateProjectSelect();
         }
     });
 
@@ -456,27 +381,17 @@ function initUI() {
         showToast(`Unstarred ${starred.length} image${starred.length > 1 ? 's' : ''}.`);
     });
 
-    // API Key
-    apiKeyInput?.addEventListener('input', () => {
-        state.setApiKey(apiKeyInput.value);
-        updateActionButtonsState();
-    });
-    apiKeyToggle?.addEventListener('click', () => {
-        const isPassword = apiKeyInput.type === 'password';
-        if (apiKeyInput) apiKeyInput.type = isPassword ? 'text' : 'password';
-        apiKeyToggle.textContent = isPassword ? '🙈' : '👁';
-    });
-
-    apiKeyToggle?.addEventListener('click', () => {
-        const isPassword = apiKeyInput.type === 'password';
-        if (apiKeyInput) apiKeyInput.type = isPassword ? 'text' : 'password';
-        apiKeyToggle.textContent = isPassword ? '🙈' : '👁';
-    });
+    // Centralized API Key management is now in Settings Logic (lines 332-343)
 
     retryBtn?.addEventListener('click', () => {
         state.clearError();
         if (promptInput) promptInput.value = state.lastPrompt;
-        handleAction('generate');
+        generationManager.handleAction(state.lastMode || 'generate', uploadedImageBase64);
+    });
+
+    const errorCancelBtn = document.getElementById('error-cancel-btn');
+    errorCancelBtn?.addEventListener('click', () => {
+        state.clearError();
     });
 
     infoSeed?.addEventListener('click', () => {
@@ -485,8 +400,12 @@ function initUI() {
     });
 
     infoPrompt?.addEventListener('click', () => {
-        const img = state.getFeaturedImage();
-        if (img) copyToClipboard(img.prompt || '', 'Prompt copied!');
+        if (document.body.classList.contains('prompt-bar-hidden')) {
+            togglePromptBar();
+        } else {
+            const img = state.getFeaturedImage();
+            if (img) copyToClipboard(img.prompt || '', 'Prompt copied!');
+        }
     });
 
     // Sidebar Toggle
@@ -506,7 +425,7 @@ function initUI() {
         const ok = await state.setupStorage();
         storagePickBtn.disabled = false;
         storagePickBtn.textContent = 'Choose Folder';
-        if (!ok) showToast('No folder selected — try again.');
+        if (!ok) showToast('No folder selected - try again.');
     });
     storageSkipBtn?.addEventListener('click', async () => {
         await state.skipToLocalStorage();
@@ -530,14 +449,7 @@ function initUI() {
 
     initVglInspector();
 
-    state.on('loadingChanged', () => {
-        const loadingOverlay = getEl('loading-overlay');
-        const loadingText = loadingOverlay?.querySelector('.loading-text');
-        if (loadingOverlay) {
-            loadingOverlay?.classList.toggle('hidden', !state.isLoading);
-            if (loadingText) loadingText.textContent = state.loadingText || 'Processing…';
-        }
-    });
+    // Loading overlay is handled by canvas.js updateLoadingState via core state events
 
     globalConsoleBtn?.addEventListener('click', () => {
         apiConsole.toggle();
@@ -550,6 +462,7 @@ function initUI() {
 function togglePromptBar() {
     if (promptBar) {
         const isCollapsed = promptBar.classList.toggle('collapsed');
+        document.body.classList.toggle('prompt-bar-hidden', isCollapsed);
         if (isCollapsed) {
             // Also close advanced settings if they were open
             const advanced = promptBar.querySelector('.prompt-advanced-details');
@@ -592,7 +505,6 @@ let currentAbortController = null;
 
     loadApiKey();
     updateStorageUI();
-    populateProjectSelect();
     updateActionButtonsState();
 
     console.log('[APP] VGL Studio initialized (Bria API refactored)');
@@ -608,63 +520,11 @@ let currentAbortController = null;
  *   'fs'       → hide banner, show folder indicator in header
  *   'ls'       → hide banner, hide indicator
  */
-function updateStorageUI() {
-    if (!storageBanner) return;
-
-    const type = state.storageType;
-    const fsSupported = dataDB.isSupported();
-    const bannerDismissed = localStorage.getItem('vgl-studio-banner-dismissed') === '1';
-
-    if (type === 'pending') {
-        // FSA supported, no folder chosen yet — full setup prompt
-        if (storageBannerTitle) storageBannerTitle.textContent = 'Set up persistent storage';
-        if (storageBannerDesc) storageBannerDesc.textContent = 'Choose a local folder to save your projects & images across sessions.';
-        if (storagePickBtn) { storagePickBtn.textContent = 'Choose Folder'; storagePickBtn?.classList.remove('hidden'); }
-        storageSkipBtn?.classList.remove('hidden');
-        storageBanner?.classList.remove('hidden');
-        storageIndicatorBtn?.classList.add('hidden');
-
-    } else if (type === 'fs') {
-        storageBanner?.classList.add('hidden');
-        if (storageIndicatorBtn && storageIndicatorName) {
-            storageIndicatorName.textContent = dataDB.rootDir?.name || 'Local Folder';
-            storageIndicatorBtn?.classList.remove('hidden');
-        }
-
-    } else {
-        // localStorage mode
-        if (!bannerDismissed) {
-            // First visit — inform the user about storage
-            if (!fsSupported) {
-                // Browser doesn't support FSA (Firefox, Safari, etc.)
-                if (storageBannerTitle) storageBannerTitle.textContent = 'Using browser storage';
-                if (storageBannerDesc) storageBannerDesc.textContent = 'Projects are saved in this browser. For folder-based storage, use Chrome or Edge.';
-                storagePickBtn?.classList.add('hidden');
-                storageSkipBtn?.classList.add('hidden');
-            } else {
-                // FSA supported but user chose browser storage
-                if (storageBannerTitle) storageBannerTitle.textContent = 'Using browser storage';
-                if (storageBannerDesc) storageBannerDesc.textContent = 'Projects are saved in this browser only. You can switch to a local folder anytime.';
-                if (storagePickBtn) { storagePickBtn.textContent = 'Choose Folder instead'; storagePickBtn?.classList.remove('hidden'); }
-                storageSkipBtn?.classList.add('hidden');
-            }
-            storageBanner?.classList.remove('hidden');
-        } else {
-            storageBanner?.classList.add('hidden');
-        }
-        
-        if (storageIndicatorBtn && storageIndicatorName) {
-            storageIndicatorName.textContent = 'Browser Storage';
-            storageIndicatorBtn?.classList.remove('hidden');
-        }
-    }
-}
 
 
 // After the FS folder is chosen
 state.on('storageReady', () => {
     updateStorageUI();
-    populateProjectSelect();
     updateActionButtonsState();
 });
 
@@ -672,20 +532,7 @@ state.on('storageReady', () => {
 // PROJECT MANAGEMENT
 // ============================================================
 
-function populateProjectSelect() {
-    const projects = state.getProjectList();
-    const activeId = state.activeProjectId;
-
-    projectSelect.innerHTML = '<option value="">— Select Project —</option>';
-    projects.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        const displayName = p.name.length > 40 ? p.name.substring(0, 40) + '...' : p.name;
-        opt.textContent = `${displayName} (${p.imageCount})`;
-        if (p.id === activeId) opt.selected = true;
-        projectSelect.appendChild(opt);
-    });
-}
+// populateProjectSelect removed since ArcToolbar manages its own dropdown
 
 function openNewProjectDialog() {
     if (!newProjectDialog) return;
@@ -701,7 +548,7 @@ async function handleExportStarred() {
     const project = state.getActiveProject();
     const starredImages = project?.images.filter(img => img.isStarred) || [];
 
-    /** Return full base64 for an image — loads from disk in FS mode. */
+    /** Return full base64 for an image - loads from disk in FS mode. */
     async function resolveBase64(img) {
         if (img.base64) return img.base64;
         if (state.storageType === 'fs') {
@@ -748,11 +595,16 @@ async function handleExportStarred() {
 }
 
 state.on('projectChanged', () => {
-    populateProjectSelect();
+    // ArcToolbar automatically listens to projectChanged events.
     updateActionButtonsState();
     // updateJsonInspector() handled by event listener on State
     updateHeaderToggleState();
     updateStarredCount();
+    
+    // Unmask/Mask UI dynamically relative to new target
+    state.emit('loadingChanged');
+    state.emit('canvasLoadingChanged');
+    state.emit('backgroundJobsChanged');
 });
 
 state.on('imagesChanged', () => {
@@ -788,8 +640,19 @@ function loadApiKey() {
     }
 }
 
+function updateStorageUI() {
+    const isLocal = state.storageType === 'fs';
+    const folderName = dataDB.rootDir?.name || 'Local Folder';
 
+    if (storageIndicatorBtn) {
+        storageIndicatorBtn.classList.toggle('hidden', !isLocal);
+        if (storageIndicatorName) storageIndicatorName.textContent = folderName;
+    }
 
+    if (storageBanner) {
+        storageBanner.classList.toggle('hidden', state.storageType !== 'pending');
+    }
+}
 
 // ============================================================
 // PROMPT AUTO-EXPAND + EXPAND MODAL
@@ -858,471 +721,223 @@ function updateActionButtonsState() {
 
     // Always enable Generate/Refine/Edit if we have a project,
     // so we can give constructive feedback on click if API key or Prompt is missing.
-    if (btnGenerate) btnGenerate.disabled = false;
+    const isMaskMode = state.canvasMode === 'mask';
+    const isExpandMode = state.canvasMode === 'expand';
+
+    if (btnGenerate) {
+        btnGenerate.disabled = false;
+        btnGenerate.style.display = (isMaskMode || isExpandMode) ? 'none' : 'inline-flex';
+    }
     
     // Logic for Refine button: Only visible if featured image has a VGL (structured_prompt)
     if (btnRefine) {
         const hasVGL = hasFeatured && !!state.getFeaturedImage()?.structured_prompt;
-        btnRefine.style.display = hasVGL ? 'inline-flex' : 'none';
+        btnRefine.style.display = (hasVGL && !isMaskMode && !isExpandMode) ? 'inline-flex' : 'none';
         btnRefine.disabled = !hasVGL;
     }
 
     // Logic for Edit button: Visible if any image is selected or an image was uploaded
     if (btnEdit) {
         const canEdit = hasFeatured || uploadedImageBase64;
-        btnEdit.style.display = canEdit ? 'inline-flex' : 'none';
+        btnEdit.style.display = (canEdit && !isExpandMode) ? 'inline-flex' : 'none';
         btnEdit.disabled = !canEdit;
+    }
+
+    if (btnExpand) {
+        const canExpand = hasFeatured && isExpandMode;
+        btnExpand.style.display = canExpand ? 'inline-flex' : 'none';
+        btnExpand.disabled = !canExpand;
+    }
+
+    const isLayoutMode = state.canvasMode === 'layout';
+
+    const btnLayout = document.getElementById('btn-layout');
+    if (btnLayout) {
+        const canLayout = hasFeatured && state.selectedImageIds && state.selectedImageIds.size === 1 && !isExpandMode && !isLayoutMode;
+        btnLayout.style.display = canLayout ? 'inline-flex' : 'none';
+        btnLayout.disabled = !canLayout;
+    }
+
+    const btnSynthesize = document.getElementById('btn-synthesize');
+    if (btnSynthesize) {
+        // Show Synthesize button if we are in layout mode OR multiple images are selected
+        const hasMultipleSelected = state.selectedImageIds && state.selectedImageIds.size > 1;
+        const showSynthesize = isLayoutMode || hasMultipleSelected;
+        
+        btnSynthesize.classList.toggle('hidden', !showSynthesize);
+        btnSynthesize.disabled = !showSynthesize;
+        
+        if (showSynthesize) {
+            if (btnGenerate) btnGenerate.style.display = 'none';
+            if (btnRefine) btnRefine.style.display = 'none';
+            if (btnEdit) btnEdit.style.display = 'none';
+            if (btnExpand) btnExpand.style.display = 'none';
+            if (btnLayout) btnLayout.style.display = 'none';
+        }
     }
 
     // Visual cues only
     btnGenerate?.classList.toggle('dimmed', !hasPrompt || !hasApiKey);
     if (btnRefine) btnRefine.classList.toggle('dimmed', !hasPrompt || !hasApiKey);
     if (btnEdit) btnEdit.classList.toggle('dimmed', !hasPrompt || !hasApiKey);
+    if (btnExpand) btnExpand.classList.toggle('dimmed', !hasApiKey);
 
     // Update Reference Indicator visibility
-    if (hasFeatured) {
-        const featured = state.getFeaturedImage();
-        refIndicator?.classList.toggle('hidden', !featured.isReference);
-    } else {
-        refIndicator?.classList.add('hidden');
+    const isUploading = !!uploadedImageBase64;
+    const isFeaturedRef = hasFeatured && state.getFeaturedImage()?.isReference;
+    
+    if (refIndicator) {
+        refIndicator.classList.toggle('hidden', !isUploading && !isFeaturedRef);
+        if (isUploading) {
+            refIndicator.textContent = 'Using Uploaded Reference';
+            refIndicator.style.background = 'var(--accent-primary)';
+        } else if (isFeaturedRef) {
+            refIndicator.textContent = 'Reference Image';
+            refIndicator.style.background = '';
+        }
     }
 }
 
 state.on('featuredChanged', () => {
     updateActionButtonsState();
     // Handled by event listener
-    // Do NOT auto-populate the seed field — leave it showing the 'Rand' placeholder
+    // Do NOT auto-populate the seed field - leave it showing the 'Rand' placeholder
     // unless the user has manually typed a value.
+});
+
+state.on('canvasModeChanged', () => {
+    updateActionButtonsState();
+    if (state.canvasMode === 'expand') {
+        const promptInput = document.getElementById('prompt-input');
+        if (promptInput) promptInput.value = '';
+    }
 });
 
 // Upload listeners handled in initUI
 
 
-// ---- Interrupt ----
-if (btnInterrupt) {
-    btnInterrupt?.addEventListener('click', () => {
-        if (currentAbortController) {
-            currentAbortController.abort();
-            currentAbortController = null;
-            state.setLoading(false);
-            showToast('Processing interrupted');
-        }
+function setupActionHandlers() {
+    generationManager = new GenerationManager(state, {
+        promptInput, imageCountBtn, resolutionSelect, aspectRatioBtn,
+        negativePromptInput, previewSpCheckbox, modContentToggle, modInputToggle,
+        modOutputToggle, ipSignalToggle: document.getElementById('ip-signal-toggle'),
+        liteQuickBtn, liteModeToggle, actionButtonsStack, btnInterrupt,
+        settingsDialog, spPreviewEditor, spPreviewDialog, spPreviewGenerate, spPreviewCancel,
+        seedInput
     });
-}
 
-// ============================================================
-// SUBMIT ACTIONS (Generate / Refine / Edit)
-// ============================================================
-
-// ---- Submit Actions ----
-if (btnGenerate) btnGenerate?.addEventListener('click', () => handleAction('generate'));
-if (btnRefine) btnRefine?.addEventListener('click', () => handleAction('refine'));
-if (btnEdit) btnEdit?.addEventListener('click', () => handleAction('edit'));
-
-if (promptInput) {
-    promptInput?.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-            if (btnGenerate && !btnGenerate.disabled) handleAction('generate');
-            else if (btnRefine && !btnRefine.disabled) handleAction('refine');
-            else if (btnEdit && !btnEdit.disabled) handleAction('edit');
-        }
-    });
-}
-
-/**
- * Gather common generation options from the UI.
- */
-function getGenerationOptions() {
-    // Prefer the visible quick button; fall back to the (hidden) Advanced checkbox
-    const isLite = liteQuickBtn ? liteQuickBtn?.classList.contains('active') : !!liteModeToggle.checked;
-    return {
-        aspect_ratio: aspectRatioSelect.value || undefined,
-        resolution: resolutionSelect.value === '4MP' ? '4MP' : undefined,
-        negative_prompt: negativePromptInput.value.trim() || undefined,
-        lite: isLite,
-        mod_content: !!modContentToggle.checked,
-        mod_input: !!modInputToggle.checked,
-        mod_output: !!modOutputToggle.checked,
-        ip_signal: !!document.getElementById('ip-signal-toggle').checked
-    };
-}
-
-async function handleAction(mode) {
-    const prompt = promptInput.value.trim();
-    const hasApiKey = !!state.getApiKey();
-
-    // Check API key first — this is the harder blocker to discover
-    if (!hasApiKey) {
-        const dlg = document.getElementById('api-key-warning-dialog');
-        if (dlg?.showModal) dlg.showModal();
-        else showToast('Bria API Token is missing. See Advanced Settings.');
-        return;
-    }
-
-    if (!prompt) {
-        showToast('Please enter a prompt or instructions.');
-        promptInput.focus();
-        return;
-    }
-
-    const imageCount = parseInt(imageCountSelect.value, 10);
-    const options = getGenerationOptions();
-    const seed = seedInput.value.trim() ? parseInt(seedInput.value.trim(), 10) : null;
-
-    console.log(`[handleAction] START - Mode: ${mode}, Count: ${imageCount}, Prompt: "${prompt}"`, options);
-
-    try {
-        const featured = state.getFeaturedImage();
-
-        if ((mode === 'refine' || mode === 'edit') && !featured && !uploadedImageBase64) {
-            showToast(`Please select an image in the gallery to ${mode}.`);
-            return;
-        }
-
-        if (previewSpCheckbox.checked && (mode === 'generate' || mode === 'edit' || mode === 'refine')) {
-            console.log('[handleAction] Redirecting to Preview SP');
-            await handleStructuredPromptPreview(prompt, imageCount, options, mode);
-            return;
-        }
-
-        let editImage = uploadedImageBase64 || (mode === 'edit' ? featured?.base64 : null);
-        let parentImageId = (mode === 'refine' || mode === 'edit') ? featured?.id : null;
-        if (mode === 'generate' && state.pushedLineageId && previewSpCheckbox.checked) {
-            parentImageId = state.pushedLineageId;
-        }
-        let batchId = generateUUID();
-
-        // --- Workflow 1: Upload Registration ---
-        if (mode === 'edit' && uploadedImageBase64) {
-            state.setLoading(true, 'Registering upload…');
-            const thumb = await createThumbnail(uploadedImageBase64, 200);
-            const refImg = await state.addImage({
-                base64: uploadedImageBase64,
-                thumbnail: thumb,
-                isReference: true
-            }, prompt, 'upload', batchId);
-            parentImageId = refImg.id;
-        }
-
-        state.lastPrompt = prompt;
-        state.clearError();
-        state.setLoading(true, `${mode.charAt(0).toUpperCase() + mode.slice(1).replace(/e$/, '')}ing…`);
-
-        // Interruption & Progress UI
-        currentAbortController = new AbortController();
-        actionButtonsStack?.classList.add('hidden');
-        btnInterrupt?.classList.remove('hidden');
-
-        // --- PRE-CALCULATE STRUCTURED PROMPT FOR BATCH ---
-        let batchStructuredPrompt = null;
-        if (mode === 'generate') {
-            // Check if the prompt is itself a pre-formed SP JSON — if so, skip the API call
-            const directSp = parseAsStructuredPrompt(prompt);
-            if (directSp) {
-                console.log('[TRACE] handleAction - prompt is a structured prompt JSON, skipping SP generation');
-                showToast('Using structured prompt directly — skipping layout generation.', 3000);
-                batchStructuredPrompt = directSp;
-            } else {
-                console.log('[TRACE] handleAction - mode is generate, calling generateStructuredPrompt');
-                state.setLoading(true, 'Generating layout…');
-                const spResult = await api.generateStructuredPrompt(prompt, uploadedImageBase64, null, {
-                    ...options,
-                    signal: currentAbortController.signal
-                });
-                console.log('[TRACE] handleAction - generateStructuredPrompt returned', { sp: !!spResult.structured_prompt });
-                batchStructuredPrompt = spResult.structured_prompt;
-                if (!batchStructuredPrompt) throw new Error('Failed to generate structured prompt.');
-            }
-        } else if (mode === 'refine') {
-            console.log('[TRACE] handleAction - mode is refine, usando existing SP');
-            // Use featured image's SP (parse if it's a string from storage)
-            const rawSp = featured.structured_prompt;
-            try {
-                batchStructuredPrompt = typeof rawSp === 'string' ? JSON.parse(rawSp) : rawSp;
-                if (batchStructuredPrompt && typeof batchStructuredPrompt === 'object') {
-                    const scrubKeys = ['edit', 'edit_instruction', 'edit instruction', 'edit_instructions', 'instruction'];
-                    scrubKeys.forEach(k => {
-                        if (k in batchStructuredPrompt) delete batchStructuredPrompt[k];
-                    });
-                }
-            } catch (e) {
-                console.warn('[TRACE] handleAction - Error parsing existing SP', e);
-                batchStructuredPrompt = rawSp;
-            }
-        } else if (mode === 'edit') {
-            console.log('[TRACE] handleAction - mode is edit, calling generateStructuredPrompt (instruction)');
-            state.setLoading(true, 'Generating instruction layout…');
-            const spResult = await api.generateStructuredPrompt(prompt, editImage, null, {
-                ...options,
-                signal: currentAbortController.signal
-            });
-            console.log('[TRACE] handleAction - generateStructuredPrompt (edit) returned', { sp: !!spResult.structured_prompt });
-            batchStructuredPrompt = spResult.structured_prompt;
-            if (!batchStructuredPrompt) throw new Error('Failed to generate structured instruction.');
-        }
-
-        // For edit: always generate a fresh random seed unless the user typed one.
-        // For refine: fall back to featured seed so variants are close to the source.
-        const baseSeed = seed !== null ? seed : (
-            mode === 'edit' ? Math.floor(Math.random() * 2147483647)
-                            : (mode === 'refine' && featured ? featured.seed : Math.floor(Math.random() * 2147483647))
-        );
-        console.log('[TRACE] handleAction - entering loop', { imageCount, baseSeed });
-        const batchResults = [];
-        for (let i = 0; i < imageCount; i++) {
-            console.log(`[TRACE] handleAction - loop iteration ${i + 1}/${imageCount}`);
-            if (currentAbortController?.signal.aborted) {
-                console.warn('[TRACE] handleAction - loop aborted');
-                break;
-            }
-
-            const currentSeed = baseSeed + i;
-            const statusMsg = `${mode.charAt(0).toUpperCase() + mode.slice(1).replace(/e$/, '')}ing ${i + 1}/${imageCount}…`;
-            state.setLoading(true, statusMsg);
-            if (progressText) progressText.textContent = statusMsg;
-
-            try {
-                let result;
-                switch (mode) {
-                    case 'generate':
-                    case 'refine':
-                        result = await api.generate(prompt, currentSeed, null, {
-                            ...options,
-                            structured_prompt: batchStructuredPrompt,
-                            signal: currentAbortController.signal
-                        });
-                        break;
-                    case 'edit':
-                        result = await api.edit(prompt, editImage, currentSeed, {
-                            ...options,
-                            structured_instruction: batchStructuredPrompt,
-                            signal: currentAbortController.signal
-                        });
-                        break;
-                }
-                const thumbnail = await createThumbnail(result.base64, 200);
-
-                // Incremental update — add to gallery and feature
-                await state.addImage({ ...result, thumbnail }, prompt, mode, batchId, parentImageId);
-
-                // After the first image arrives, lift the canvas overlay so the user
-                // can view and interact with it while the remaining images generate.
-                if (i === 0) state.setCanvasLoading(false);
-
-                // Add a small 1s "breath" delay between images
-                if (i < imageCount - 1) {
-                    await new Promise(r => setTimeout(r, 1000));
-                }
-            } catch (err) {
-                console.error(`[handleAction] Item ${i + 1} failed:`, err);
-            }
-        }
-    } catch (err) {
-        if (err.name === 'AbortError' || err.message === 'Processing interrupted') {
-            showToast('Generation interrupted');
-        } else {
-            console.error('[handleAction] ERROR:', err);
-            const msg = err.message || 'An unexpected error occurred.';
-            state.setError(msg);
-            showToast('Error: ' + msg);
-            if (promptInput) promptInput.value = state.lastPrompt;
-        }
-    } finally {
-        console.log('[handleAction] FINALLY - cleaning up');
-        state.setLoading(false);
-        btnInterrupt?.classList.add('hidden');
-        actionButtonsStack?.classList.remove('hidden');
-        currentAbortController = null;
-    }
-}
-
-// ============================================================
-// STRUCTURED PROMPT PREVIEW
-// ============================================================
-
-/**
- * Preview the structured prompt before generating.
- * Shows a dialog where the user can review/edit, then choose to generate or go back.
- */
-async function handleStructuredPromptPreview(prompt, imageCount, options, mode = 'generate') {
-    state.lastPrompt = prompt;
-    state.clearError();
-    state.setLoading(true, 'Generating preview…');
-
-    try {
-        const featured = state.getFeaturedImage();
-        let spResult;
-        let batchId = generateUUID();
-        let parentImageId = (mode === 'refine' || mode === 'edit' ? featured?.id : null);
-        if (mode === 'generate' && state.pushedLineageId) {
-            parentImageId = state.pushedLineageId;
-        }
-        // For edit: fresh random seed; for refine: use featured seed; for generate: random.
-        const baseSeed = options.seed !== undefined ? options.seed : (
-            mode === 'edit' ? Math.floor(Math.random() * 2147483647)
-                            : (mode === 'refine' && featured ? featured.seed : Math.floor(Math.random() * 2147483647))
-        );
-
-        if (mode === 'refine') {
-            if (!featured) throw new Error('No image selected to refine.');
-            spResult = {
-                structured_prompt: featured.structured_prompt,
-                seed: featured.seed
-            };
-        } else if (mode === 'edit') {
-            const editImage = uploadedImageBase64 || featured?.base64;
-            if (!editImage) throw new Error('Upload or select an image for edit.');
-
-            if (uploadedImageBase64) {
-                state.setLoading(true, 'Registering upload…');
-                const thumb = await createThumbnail(uploadedImageBase64, 200);
-                const refImg = await state.addImage({
-                    base64: uploadedImageBase64,
-                    thumbnail: thumb,
-                    isReference: true
-                }, prompt, 'upload', batchId);
-                parentImageId = refImg.id;
-            }
-
-            console.log('[TRACE] handleStructuredPromptPreview - mode is edit, calling generateStructuredPrompt (instruction)');
-            state.setLoading(true, 'Generating instruction layout…');
-            spResult = await api.generateStructuredPrompt(prompt, editImage, null, options);
-        }
-        else {
-            spResult = await api.generateStructuredPrompt(prompt, uploadedImageBase64, null, options);
-        }
-
-        state.setLoading(false);
-
-        if (!spResult.structured_prompt) throw new Error('No structured prompt returned.');
-
-        const originalSp = spResult.structured_prompt;
-
-        // Format JSON
-        let formatted;
-        try {
-            const parsed = typeof originalSp === 'string'
-                ? JSON.parse(originalSp) : originalSp;
-            formatted = JSON.stringify(parsed, null, 2);
-        } catch {
-            formatted = originalSp;
-        }
-
-        spPreviewEditor.value = formatted;
-        spPreviewDialog.showModal();
-
-        const action = await new Promise((resolve) => {
-            const onGen = () => { cleanup(); resolve('generate'); };
-            const onCancel = () => { cleanup(); resolve('cancel'); };
-            function cleanup() {
-                spPreviewGenerate.removeEventListener('click', onGen);
-                spPreviewCancel.removeEventListener('click', onCancel);
-                spPreviewDialog.close();
-            }
-            spPreviewGenerate?.addEventListener('click', onGen);
-            spPreviewCancel?.addEventListener('click', onCancel);
-        });
-
-        if (action === 'generate') {
-            let editedSp = spPreviewEditor.value.trim();
-            const seedFromInput = seedInput.value.trim() ? parseInt(seedInput.value.trim(), 10) : null;
-
-            // Edit: always use a fresh random seed unless user typed one.
-            // Refine: fall back to featured seed.
-            const startSeed = seedFromInput !== null ? seedFromInput : (
-                mode === 'edit' ? Math.floor(Math.random() * 2147483647)
-                                : (mode === 'refine' && featured ? featured.seed : (spResult.seed || Math.floor(Math.random() * 2147483647)))
-            );
-
-            const editImage = uploadedImageBase64 || (mode === 'edit' ? featured?.base64 : null);
-            const parentId = parentImageId; // Use the one we prepared earlier (includes uploaded reference)
-
-            // Optimization: If JSON was edited, call generate_from_diff
-            let finalSp = editedSp;
-
-            // Simple comparison of trimmed strings to see if edited
-            if (editedSp !== formatted) {
-                console.log('[SP] JSON edited, reconciling with original via diff...');
-                state.setLoading(true, 'Optimizing structured prompt…');
-
-                // For manual edits, if it's a gallery image, we reconcile against the source image's SP
-                const baseSpForDiff = (mode === 'edit' && !uploadedImageBase64 && featured) ? featured.structured_prompt : originalSp;
-                const diffResult = await api.generateStructuredPromptFromDiff(baseSpForDiff, editedSp, startSeed, options);
-                finalSp = diffResult.structured_prompt || editedSp;
-            }
-
-            // Ensure finalSp is a parsed object if it's currently a string
-            let parsedSp = finalSp;
-            if (typeof finalSp === 'string') {
-                try {
-                    parsedSp = JSON.parse(finalSp);
-                    console.log('[TRACE] handleStructuredPromptPreview - Parsed finalSp successfully');
-                } catch (e) {
-                    console.warn('[TRACE] [SP] Could not parse finalSp as JSON, sending as-is:', e);
-                }
-            }
-
-            console.log('[TRACE] handleStructuredPromptPreview - entering loop', { imageCount, mode });
-            state.setLoading(true, 'Generating batch from structured prompt…');
-            currentAbortController = new AbortController();
+    state.on('loadingChanged', () => {
+        if (state.isLoading) {
             actionButtonsStack?.classList.add('hidden');
             btnInterrupt?.classList.remove('hidden');
-            if (progressText) progressText.textContent = 'Generating batch…';
-
-            for (let i = 0; i < imageCount; i++) {
-                console.log(`[TRACE] handleStructuredPromptPreview - loop iteration ${i + 1}/${imageCount}`);
-                if (currentAbortController?.signal.aborted) break;
-
-                const statusMsg = `Generating image ${i + 1}/${imageCount}…`;
-                state.setLoading(true, statusMsg);
-                if (progressText) progressText.textContent = statusMsg;
-                const currentSeed = startSeed + i;
-
-                try {
-                    let result;
-                    if (mode === 'edit') {
-                        result = await api.edit(prompt, editImage, currentSeed, {
-                            ...options,
-                            structured_instruction: parsedSp
-                        });
-                    } else {
-                        result = await api.generate(prompt, currentSeed, null, {
-                            ...options,
-                            structured_prompt: parsedSp
-                        });
-                    }
-
-                    const thumbnail = await createThumbnail(result.base64, 200);
-
-                    // Incremental update
-                    await state.addImage({ ...result, thumbnail }, prompt, mode, batchId, parentImageId);
-
-                    // Lift canvas overlay after first image so the user can interact
-                    if (i === 0) state.setCanvasLoading(false);
-
-                    if (i < imageCount - 1) {
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                } catch (itemErr) {
-                    console.error(`[SP Preview] Image ${i + 1} failed:`, itemErr);
-                    showToast(`Image ${i + 1} failed: ${itemErr.message}`);
-                    // Continue with the rest of the batch
-                }
-            }
+        } else {
+            btnInterrupt?.classList.add('hidden');
+            actionButtonsStack?.classList.remove('hidden');
         }
-    } catch (err) {
-        state.setError(err.message);
-        showToast('Error: ' + err.message); // Explicitly show toast
-    } finally {
-        state.setLoading(false);
-        btnInterrupt?.classList.add('hidden');
-        actionButtonsStack?.classList.remove('hidden');
-        currentAbortController = null;
+    });
+
+    state.on('selectionChanged', () => {
+        updateActionButtonsState();
+    });
+
+    btnGenerate?.addEventListener('click', () => generationManager.handleAction('generate', uploadedImageBase64));
+    btnRefine?.addEventListener('click', () => generationManager.handleAction('refine', uploadedImageBase64));
+    btnEdit?.addEventListener('click', () => generationManager.handleAction('edit', uploadedImageBase64));
+    btnExpand?.addEventListener('click', () => generationManager.handleAction('expand', uploadedImageBase64));
+    
+    const btnLayout = document.getElementById('btn-layout');
+    btnLayout?.addEventListener('click', () => {
+        state.setCanvasMode('layout');
+    });
+    
+    const btnSynthesize = document.getElementById('btn-synthesize');
+    btnSynthesize?.addEventListener('click', () => generationManager.handleAction('blend', uploadedImageBase64));
+
+    btnInterrupt?.addEventListener('click', () => {
+        generationManager.interrupt();
+    });
+
+    state.on('interruptRequested', () => {
+        generationManager?.interrupt();
+    });
+
+    if (promptInput) {
+        promptInput.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                if (btnExpand && !btnExpand.disabled && btnExpand.style.display !== 'none') generationManager.handleAction('expand', uploadedImageBase64);
+                else if (btnEdit && !btnEdit.disabled && state.canvasMode === 'mask') generationManager.handleAction('edit', uploadedImageBase64);
+                else if (btnGenerate && !btnGenerate.disabled && btnGenerate.style.display !== 'none') generationManager.handleAction('generate', uploadedImageBase64);
+                else if (btnRefine && !btnRefine.disabled && btnRefine.style.display !== 'none') generationManager.handleAction('refine', uploadedImageBase64);
+                else if (btnEdit && !btnEdit.disabled && btnEdit.style.display !== 'none') generationManager.handleAction('edit', uploadedImageBase64);
+            }
+        });
     }
+
+    // Custom Dropdown UI Logic
+    document.addEventListener('click', (e) => {
+        // Close all dropdowns
+        document.querySelectorAll('.custom-dropdown-menu').forEach(menu => {
+            if (!menu.classList.contains('hidden') && !menu.parentElement.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // Toggle dropdown
+        const btn = e.target.closest('.custom-dropdown-btn');
+        if (btn) {
+            const menu = btn.parentElement.querySelector('.custom-dropdown-menu');
+            if (menu) {
+                // If it's the seed popover, don't close others maybe? Just toggle this
+                const isHidden = menu.classList.contains('hidden');
+                document.querySelectorAll('.custom-dropdown-menu').forEach(m => m.classList.add('hidden'));
+                if (isHidden) menu.classList.remove('hidden');
+            }
+            return;
+        }
+
+        // Select option
+        const opt = e.target.closest('.dropdown-option');
+        if (opt) {
+            const menu = opt.closest('.custom-dropdown-menu');
+            const wrap = opt.closest('.custom-dropdown-wrap');
+            const mainBtn = wrap.querySelector('.custom-dropdown-btn');
+            
+            menu.querySelectorAll('.dropdown-option').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            
+            mainBtn.textContent = opt.textContent;
+            mainBtn.dataset.value = opt.dataset.value;
+            menu.classList.add('hidden');
+            
+            updateActionButtonsState();
+        }
+    });
+
+    seedPopoverBtn?.addEventListener('click', () => {
+        if (seedInput?.value) {
+            seedPopoverBtn.textContent = '🎲 ' + seedInput.value;
+        } else {
+            seedPopoverBtn.textContent = '🎲 Auto';
+        }
+        setTimeout(() => seedInput?.focus(), 50);
+    });
+
+    document.getElementById('seed-random-btn')?.addEventListener('click', () => {
+        if (seedInput) {
+            seedInput.value = '';
+            seedPopoverBtn.textContent = '🎲 Auto';
+            document.getElementById('seed-popover-menu')?.classList.add('hidden');
+        }
+    });
+
+    seedInput?.addEventListener('input', () => {
+        if (seedInput.value) {
+            seedPopoverBtn.textContent = '🎲 ' + seedInput.value;
+        } else {
+            seedPopoverBtn.textContent = '🎲 Auto';
+        }
+    });
 }
-
-// Retry button
-
 
 // ============================================================
 // IMAGE INFO BAR (copy actions)
@@ -1420,6 +1035,28 @@ function initCanvasNav() {
         state.setFeaturedImage(target.id);
         navScrollToImage(target.id);
     });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+        
+        let targetId = null;
+        if (e.key === 'ArrowLeft') {
+            targetId = 'nav-prev';
+        } else if (e.key === 'ArrowRight') {
+            targetId = 'nav-next';
+        } else if (e.key === 'ArrowUp') {
+            if (e.shiftKey && (e.metaKey || e.ctrlKey)) targetId = 'nav-jump-top-parent';
+            else if (e.shiftKey) targetId = 'nav-jump-parent';
+        } else if (e.key === 'ArrowDown') {
+            if (e.shiftKey && (e.metaKey || e.ctrlKey)) targetId = 'nav-jump-last-child';
+            else if (e.shiftKey) targetId = 'nav-jump-first-child';
+        }
+
+        if (targetId) {
+            e.preventDefault();
+            document.getElementById(targetId)?.click();
+        }
+    });
 }
 
 
@@ -1438,15 +1075,18 @@ function initVglInspector() {
     // Only init once
     if (vglInspectorInstance) return;
 
-    // Use the explicit ID configured in index.html
-    vglInspectorInstance = new VglInspector('arc-vgl-mount', {
+    // Use the custom element
+    vglInspectorInstance = document.createElement('vgl-inspector');
+    vglInspectorInstance.setConfig({
         onPushToPrompt: (parsedJson) => {
             if (promptInput) promptInput.value = JSON.stringify(parsedJson, null, 2);
             if (previewSpCheckbox) previewSpCheckbox.checked = true; // Setup for bypass
             if (state.featuredImageId) state.pushedLineageId = state.featuredImageId;
         }
     });
-    vglInspectorInstance.render();
+
+    const mountPoint = document.getElementById('arc-vgl-mount');
+    if (mountPoint) mountPoint.appendChild(vglInspectorInstance);
 
     // Hook to global state
     function syncVgl() {
@@ -1480,6 +1120,94 @@ function initVglInspector() {
     }
 
     syncVgl();
+
+    // Listen to changes
+    state.on('featuredChanged', syncVgl);
+    state.on('projectChanged', () => {
+        vglInspectorInstance.updateData(null);
+        syncVgl();
+    });
+
+    // ==========================================
+    // Multi-Project Background Tracking
+    // ==========================================
+    const bgJobTray = document.createElement('div');
+    bgJobTray.id = 'bg-job-tray';
+    bgJobTray.className = 'bg-job-tray hidden';
+    document.body.appendChild(bgJobTray);
+
+    document.head.insertAdjacentHTML('beforeend', `
+        <style>
+            .bg-job-tray {
+                position: fixed;
+                top: 60px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1000;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                pointer-events: none;
+            }
+            .bg-job-tray.hidden { display: none; }
+            .bg-job-item {
+                pointer-events: auto;
+                background: rgba(43, 45, 49, 0.95);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                padding: 8px 16px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 13px;
+                backdrop-filter: blur(10px);
+            }
+            .bg-job-item .spinner {
+                width: 14px;
+                height: 14px;
+                border: 2px solid rgba(255, 255, 255, 0.2);
+                border-top-color: var(--accent-light, #58a6ff);
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+            .bg-job-cancel {
+                background: none;
+                border: none;
+                color: rgba(255, 255, 255, 0.5);
+                cursor: pointer;
+                padding: 4px;
+                margin-left: 8px;
+            }
+            .bg-job-cancel:hover { color: #ff5555; }
+        </style>
+    `);
+
+    state.on('backgroundJobsChanged', () => {
+        const jobs = state.getBackgroundJobs();
+        if (jobs.length === 0) {
+            bgJobTray.classList.add('hidden');
+            return;
+        }
+        
+        bgJobTray.classList.remove('hidden');
+        bgJobTray.innerHTML = jobs.map(j => `
+            <div class="bg-job-item">
+                <div class="spinner"></div>
+                <span class="bg-job-text"><b>${j.projectName}</b>: ${j.text}</span>
+                <button class="bg-job-cancel" data-id="${j.projectId}">✕</button>
+            </div>
+        `).join('');
+
+        bgJobTray.querySelectorAll('.bg-job-cancel').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const pid = e.target.getAttribute('data-id');
+                generationManager.interrupt(pid);
+                state.setLoading(false, null, pid); // Pre-emptive UI sync
+            });
+        });
+    });
 }
 
 

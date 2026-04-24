@@ -200,13 +200,24 @@ async function pollStatus(requestId, requestOptions = {}) {
     const POLL_INTERVAL = 5000;
     const MAX_POLLS = 120; // 10 min at 5s intervals
 
+    const delay = (ms) => new Promise(resolve => {
+        if (requestOptions.signal?.aborted) return resolve();
+        const id = setTimeout(resolve, ms);
+        if (requestOptions.signal) {
+            requestOptions.signal.addEventListener('abort', () => {
+                clearTimeout(id);
+                resolve();
+            }, { once: true });
+        }
+    });
+
     // Small initial delay for eventual consistency on Bria's side
-    await new Promise(r => setTimeout(r, 2000));
+    await delay(2000);
 
     for (let i = 0; i < MAX_POLLS; i++) {
         if (requestOptions.signal?.aborted) throw new Error('Request cancelled by user.');
 
-        if (i > 0) await new Promise(r => setTimeout(r, POLL_INTERVAL));
+        if (i > 0) await delay(POLL_INTERVAL);
 
         if (requestOptions.signal?.aborted) throw new Error('Request cancelled by user.');
 
@@ -255,7 +266,6 @@ async function pollStatus(requestId, requestOptions = {}) {
                         endpoint: `/status/${requestId}`,
                         response: data
                     });
-                    state.setLoading(true, `Processing… (${i + 1})`);
                     continue;
                 default:
                     state.addLog({
@@ -385,11 +395,15 @@ const api = {
      * Uses /v2/image/edit.
      */
     async edit(prompt, imageBase64, seed, options = {}) {
-        console.log('[TRACE] api.edit called', { promptSnippet: prompt?.substring(0, 20), seed, optionsKeys: Object.keys(options) });
+        const isMasked = options.masks && options.masks.length > 0;
         const endpoint = '/image/edit';
         const raw = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
         const body = { images: [raw] };
+        if (isMasked) {
+             body.mask = options.masks[0].replace(/^data:image\/\w+;base64,/, '');
+        }
+        
         if (seed !== null && typeof seed !== 'undefined' && seed > 0) body.seed = seed;
 
         // Standard options
@@ -400,10 +414,7 @@ const api = {
 
         if (options.structured_instruction || options.structured_prompt) {
             let si = options.structured_instruction || options.structured_prompt;
-            // Bria /image/edit expects structured_instruction as a JSON *string*, not an object
-            if (typeof si === 'object') {
-                si = JSON.stringify(si);
-            }
+            if (typeof si === 'object') si = JSON.stringify(si);
             body.structured_instruction = si;
         } else {
             body.instruction = prompt;
@@ -444,6 +455,38 @@ const api = {
             base64,
             seed: data.result?.seed || seed,
             structured_prompt: data.result?.structured_instruction || data.result?.structured_prompt || options.structured_prompt || null,
+            imageUrl
+        };
+    },
+
+    /**
+     * Expand (Outpaint) an image using Bria's /image-expansion endpoint.
+     */
+    async expandImage(imageBase64, boundsObj, prompt = '', seed = null, options = {}) {
+        const endpoint = '/image/edit/expand';
+        const raw = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+
+        const body = { 
+            image: raw,
+            canvas_size: boundsObj.canvas,
+            original_image_size: boundsObj.original_image_size,
+            original_image_location: boundsObj.offset,
+            prompt: prompt
+        };
+        
+        if (seed !== null && typeof seed !== 'undefined' && seed > 0) body.seed = seed;
+        body.fast = false; // We can configure this later if requested
+
+        const data = await briaRequest(endpoint, body, 'POST', { signal: options.signal });
+        const imageUrl = data.result?.image_url;
+        if (!imageUrl) throw new Error('No image returned from Expand API.');
+
+        const base64 = await fetchImageAsBase64(imageUrl);
+
+        return {
+            base64,
+            seed: data.result?.seed || seed,
+            structured_prompt: null,
             imageUrl
         };
     },
@@ -602,6 +645,38 @@ const api = {
             seed: data.result?.seed || null, 
             structured_prompt: data.result?.structured_instruction || data.result?.structured_prompt || null,
             imageUrl 
+        };
+    },
+
+    /**
+     * Blend multiple images (pre-composited locally) into one.
+     * POST /v2/image/edit/blend
+     */
+    async blend(prompt, imageBase64, seed = null, options = {}) {
+        const body = {
+            instruction: prompt,
+            images: [imageBase64.replace(/^data:image\/\w+;base64,/, '')],
+            num_results: 1,
+            sync: false
+        };
+
+        if (seed !== null) body.seed = seed;
+        if (options.aspect_ratio) body.aspect_ratio = options.aspect_ratio;
+        if (options.resolution) body.resolution = options.resolution;
+        if (options.negative_prompt) body.negative_prompt = options.negative_prompt;
+
+        const data = await briaRequest('/image/edit', body, 'POST', { signal: options.signal });
+        
+        const imageUrl = data.result?.image_url || data.result?.url;
+        if (!imageUrl) throw new Error('No image URL returned from Blend API.');
+
+        const base64 = await fetchImageAsBase64(imageUrl);
+
+        return {
+            base64,
+            seed: data.result?.seed || seed,
+            structured_prompt: data.result?.structured_prompt || null,
+            imageUrl
         };
     }
 };

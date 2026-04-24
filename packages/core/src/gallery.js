@@ -200,6 +200,7 @@ export function initGallery(mountPointId = null) {
         highlightActive();
     });
     state.on('compareChanged', () => highlightActive());
+    state.on('selectionChanged', () => highlightActive());
 
     // Context menu actions
     if (contextMenu) {
@@ -230,6 +231,26 @@ export function initGallery(mountPointId = null) {
             if (e.target.closest('.star-btn')) {
                 state.toggleStar(imgId);
                 return;
+            }
+
+            // Layout Mode: add sprite instead of selecting
+            if (state.canvasMode === 'layout') {
+                const imageRecord = state.getImage(imgId);
+                if (imageRecord) {
+                    state.emit('layoutAddSprite', imageRecord);
+                }
+                return;
+            }
+
+            // Multi-selection
+            if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                if (state.selectedImageIds.size === 0 && state.featuredImageId && state.featuredImageId !== imgId) {
+                    state.toggleSelection(state.featuredImageId);
+                }
+                state.toggleSelection(imgId);
+                return;
+            } else if (state.selectedImageIds.size > 0) {
+                state.clearSelection();
             }
 
             // Default selection
@@ -660,6 +681,7 @@ function highlightActive() {
     reelScroll.querySelectorAll('.thumbnail').forEach(el => {
         const imgId = el.dataset.imageId;
         el.classList.toggle('active', imgId === state.featuredImageId);
+        el.classList.toggle('selected', state.selectedImageIds.has(imgId));
         el.classList.toggle('compare-pinned', imgId === state.compareImageId);
         el.classList.toggle('lineage-ancestor', ancestors.has(imgId));
         el.classList.toggle('lineage-descendant', descendants.has(imgId));

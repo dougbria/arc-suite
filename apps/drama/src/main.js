@@ -4,7 +4,7 @@
    ============================================================ */
 
 import state from './state-extensions.js';
-import { core, Canvas, Gallery, State as stateEngine, CardJsonEditor, EntityEditor, apiConsole, VglInspector } from '@arc/core';
+import { core, Canvas, Gallery, State as stateEngine, EntityEditor, apiConsole, VglInspector } from '@arc/core';
 const { dataDB } = stateEngine;
 import api from '@arc/api.js';
 import { initCanvasController } from './canvas-controller.js';
@@ -34,7 +34,6 @@ import {
     writeFilesToHandle,
     saveFilesToFolder
 } from '@arc/utils.js';
-import { enhanceImage } from '@arc/actions.js';
 // JsonEditor sourced from @arc/core
 
 const { initGallery } = Gallery;
@@ -1598,14 +1597,17 @@ function initVglInspector() {
     // Only init once
     if (vglInspectorInstance) return;
 
-    // Use the explicit ID configured in index.html
-    vglInspectorInstance = new VglInspector('arc-vgl-mount', {
+    // Use the custom element
+    vglInspectorInstance = document.createElement('vgl-inspector');
+    vglInspectorInstance.setConfig({
         onPushToPrompt: (parsedJson) => {
             if (promptInput) promptInput.value = JSON.stringify(parsedJson, null, 2);
             // Setup for bypass in Drama if preview isn't checked
         }
     });
-    vglInspectorInstance.render();
+
+    const mountPoint = document.getElementById('arc-vgl-mount');
+    if (mountPoint) mountPoint.appendChild(vglInspectorInstance);
 
     // Hook to global state
     function syncVgl() {

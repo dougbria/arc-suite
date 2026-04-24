@@ -4,7 +4,8 @@
 
 import state from './state.js';
 import { enhanceImage, increaseResolution, removeBackground, eraseObject } from './actions.js';
-import { copyToClipboard } from './utils.js';
+import { generateFilename, showToast, copyToClipboard, globalCoordinateMapper } from './utils.js';
+import { layoutManager } from './layout.js';
 
 const elements = {
     canvasArea: null,
@@ -19,16 +20,21 @@ const elements = {
     zoom100Btn: null,
     loadingOverlay: null,
     loadingText: null,
+    canvasInterruptBtn: null,
     errorOverlay: null,
     errorMessage: null,
-    viewerWrapper: null
+    viewerWrapper: null,
+    canvasToolbar: null,
+    toolbarBtns: null,
+    maskControls: null,
+    expandControls: null,
+    brushSlider: null,
+    maskCanvas: null,
+    expandBox: null
 };
 
-// Zoom & Pan State
-const zoomState = {
-    scale: 1,
-    translateX: 0,
-    translateY: 0,
+// Zoom & Pan State (Scale/Translate moved to globalCoordinateMapper)
+const interactionState = {
     isPanning: false,
     startX: 0,
     startY: 0
@@ -54,12 +60,28 @@ const CANVAS_HTML = `
     <!-- Image Viewer -->
     <div id="image-viewer" class="image-viewer hidden" style="display:flex; flex-direction:row; position:relative;">
       <!-- Column Wrapper for Canvas + Footer -->
-      <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
-        <div class="viewer-wrapper" id="viewer-wrapper" style="flex:1; position:relative;">
-          <img id="main-image" class="main-image" alt="Featured image" />
+      <div style="flex:1; display:flex; flex-direction:column; min-width:0; position:relative;">
+        
+        <div class="viewer-wrapper" id="viewer-wrapper" style="flex:1; position:relative; overflow:hidden;">
+          <!-- Master Container for transforms (pan/zoom) -->
+          <div id="canvas-transform-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; transform-origin: 0 0;">
+            <img id="main-image" class="main-image" alt="Featured image" />
+            <canvas id="mask-canvas" class="mask-canvas" style="position:absolute; top:0; left:0; pointer-events:none; opacity:0; transition: opacity 0.2s;"></canvas>
+            
+            <div id="layout-sprites-layer" class="layout-sprites-layer hidden" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></div>
+            
+            <div id="expand-box" class="expand-box hidden" style="position:absolute; border: 2px dashed var(--accent-primary); pointer-events:none;">
+               <div class="expand-handle expand-handle-t" data-handle="t" style="position:absolute; top:-5px; left:50%; width:10px; height:10px; background:var(--accent-primary); transform:translateX(-50%); pointer-events:auto; cursor:ns-resize;"></div>
+               <div class="expand-handle expand-handle-r" data-handle="r" style="position:absolute; top:50%; right:-5px; width:10px; height:10px; background:var(--accent-primary); transform:translateY(-50%); pointer-events:auto; cursor:ew-resize;"></div>
+               <div class="expand-handle expand-handle-b" data-handle="b" style="position:absolute; bottom:-5px; left:50%; width:10px; height:10px; background:var(--accent-primary); transform:translateX(-50%); pointer-events:auto; cursor:ns-resize;"></div>
+               <div class="expand-handle expand-handle-l" data-handle="l" style="position:absolute; top:50%; left:-5px; width:10px; height:10px; background:var(--accent-primary); transform:translateY(-50%); pointer-events:auto; cursor:ew-resize;"></div>
+            </div>
+          </div>
+
           <div id="ref-indicator" class="ref-indicator hidden">Uploaded Reference</div>
           <div id="compare-overlay" class="compare-overlay hidden">
-            <div id="compare-clipper" class="compare-clipper">
+            <!-- Compare structure ... -->
+            <div id="compare-clipper" style="position:absolute; top:0; left:0; width:100%; height:100%; overflow:hidden; pointer-events:none;">
               <img id="compare-image" class="compare-image" alt="Compare image" />
             </div>
             <div id="wipe-handle" class="wipe-handle">
@@ -70,6 +92,7 @@ const CANVAS_HTML = `
           </div>
           <!-- Hooks mount point for overarching UI extensions -->
           <div id="canvas-hooks-overlay" style="position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:49;"></div>
+
         </div>
 
         <!-- Image info bar -->
@@ -100,12 +123,18 @@ const CANVAS_HTML = `
       </div>
 
       <!-- Loading and Error Overlays -->
-      <div id="loading-overlay" class="loading-overlay hidden"><div class="spinner"></div><p class="loading-text">Generating…</p></div>
+      <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div><p class="loading-text">Generating…</p>
+        <button id="canvas-interrupt-btn" class="btn" style="margin-top:1rem; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); padding: 0.25rem 1rem;">Cancel</button>
+      </div>
       <div id="error-overlay" class="error-overlay hidden">
         <div class="error-inner">
           <div class="error-icon">⚠</div>
           <p id="error-message" class="error-message"></p>
-          <button id="retry-btn" class="btn btn-primary">Retry</button>
+          <div style="display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
+            <button id="retry-btn" class="btn btn-primary">Retry</button>
+            <button id="error-cancel-btn" class="btn btn-secondary">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -138,10 +167,22 @@ export function initCanvas(mountPointId = null) {
     elements.zoom100Btn    = document.getElementById('zoom-100-btn');
     elements.loadingOverlay = document.getElementById('loading-overlay');
     elements.loadingText = elements.loadingOverlay?.querySelector('.loading-text');
+    elements.canvasInterruptBtn = elements.loadingOverlay?.querySelector('#canvas-interrupt-btn');
     elements.errorOverlay = document.getElementById('error-overlay');
     elements.errorMessage = document.getElementById('error-message');
     elements.viewerWrapper = document.getElementById('viewer-wrapper');
+    elements.transformLayer = document.getElementById('canvas-transform-layer');
     elements.infoVersion = document.getElementById('info-version');
+    
+    // Tools
+    elements.canvasToolbar = document.getElementById('canvas-toolbar');
+    elements.maskControls = document.getElementById('toolbar-mask-controls');
+    elements.expandControls = document.getElementById('toolbar-expand-controls');
+    elements.maskCanvas = document.getElementById('mask-canvas');
+    elements.expandBox = document.getElementById('expand-box');
+    elements.brushSlider = document.getElementById('brush-size-slider');
+    
+    initTools();
 
     // Zoom control buttons
     elements.zoomFitBtn?.addEventListener('click', () => {
@@ -152,9 +193,33 @@ export function initCanvas(mountPointId = null) {
     });
 
     // Keyboard shortcuts  (ignore when typing in inputs)
+    let shiftCompareActive = false;
+    let isMouseOverCanvas = false;
+    
+    document.getElementById('canvas-wrap')?.addEventListener('mouseenter', () => isMouseOverCanvas = true);
+    document.getElementById('canvas-wrap')?.addEventListener('mouseleave', () => isMouseOverCanvas = false);
+
     document.addEventListener('keydown', (e) => {
         if (e.target.matches('input, textarea, select, [contenteditable]')) return;
-        if (e.key === 'f' || e.key === 'F') {
+        
+        if (e.key === ' ') {
+            window.isSpacebarDown = true;
+            if (state.compareActive) {
+                e.preventDefault();
+                state.emit('toggleCompareEdges');
+                state.emit('compareChanged');
+            } else {
+                // If not in compare, spacebar is pan override, so update cursor
+                if (elements.viewerWrapper && !interactionState.isPanning) {
+                    elements.viewerWrapper.style.cursor = 'grab';
+                }
+            }
+        }
+        
+        if (e.key === 'Shift' && !shiftCompareActive && state.featuredImageId && isMouseOverCanvas) {
+            shiftCompareActive = true;
+            triggerCompareAuto();
+        } else if (e.key === 'f' || e.key === 'F') {
             e.preventDefault();
             zoomToFit();
         } else if (e.key === 'h' || e.key === 'H') {
@@ -163,12 +228,24 @@ export function initCanvas(mountPointId = null) {
         }
     });
 
+    document.addEventListener('keyup', (e) => {
+        if (e.key === ' ') {
+            window.isSpacebarDown = false;
+            if (elements.viewerWrapper && !interactionState.isPanning) {
+                elements.viewerWrapper.style.cursor = '';
+            }
+        }
+        if (e.key === 'Shift' && shiftCompareActive) {
+            shiftCompareActive = false;
+            state.exitCompare();
+        }
+    });
+
     // Listen for state changes
     state.on('projectChanged', () => updateView());
     state.on('imagesAdded', () => updateView()); // Ensure welcome screen hides when images appear
     state.on('featuredChanged', () => {
-        resetZoom();
-        updateFeaturedImage();
+        updateView();
     });
     state.on('canvasLoadingChanged', () => updateLoadingState());
     state.on('loadingChanged', () => updateLoadingState());
@@ -181,6 +258,8 @@ export function initCanvas(mountPointId = null) {
     elements.viewerWrapper.addEventListener('mousedown', startPan);
     window.addEventListener('mousemove', doPan);
     window.addEventListener('mouseup', endPan);
+
+    layoutManager.init();
 
     // Canvas Right-Click Context Menu
     initCanvasContextMenu();
@@ -256,6 +335,10 @@ function initCanvasContextMenu() {
                 if (desc) eraseObject(imageId, desc);
                 break;
             }
+            case 'compare': {
+                triggerCompareAuto();
+                break;
+            }
             case 'copy-object': {
                 const json = btn.dataset.json;
                 if (json) copyToClipboard(json, 'Object copied!');
@@ -278,6 +361,32 @@ function initCanvasContextMenu() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') hideCanvasContextMenu();
     });
+
+}
+
+function triggerCompareAuto() {
+    const img = state.getFeaturedImage();
+    if (!img) return;
+    const project = state.getActiveProject();
+    if (project && project.images) {
+        if (img.parentImageId) {
+            state.setCompareImage(img.parentImageId);
+            return;
+        }
+        if (img.batchId) {
+            const siblings = project.images.filter(i => i.batchId === img.batchId && i.id !== img.id);
+            if (siblings.length > 0) {
+                let best = siblings.find(i => i.seed === img.seed - 1);
+                if (!best) best = siblings.find(i => i.seed === img.seed + 1);
+                if (!best) best = siblings[0];
+                if (best) {
+                    state.setCompareImage(best.id);
+                    return;
+                }
+            }
+        }
+    }
+    showToast('No suitable image to compare against.', 3000);
 }
 
 /**
@@ -374,6 +483,372 @@ function hideCanvasContextMenu() {
 }
 
 
+// ============================================================
+// CANVAS TOOLS (Mask & Expand)
+// ============================================================
+
+function initTools() {
+    const btns = elements.canvasToolbar?.querySelectorAll('.toolbar-mode-btn');
+    if (btns) {
+        btns.forEach(btn => btn.addEventListener('click', () => {
+            const mode = btn.dataset.mode;
+            state.setCanvasMode(mode);
+        }));
+    }
+
+    state.on('canvasModeChanged', updateToolModes);
+    state.on('featuredChanged', () => {
+        const img = state.getFeaturedImage();
+        if (img) setupToolCanvases(img);
+    });
+
+    setupMaskDrawing();
+    setupExpandDragging();
+}
+
+function updateToolModes() {
+    const mode = state.canvasMode;
+    const btns = elements.canvasToolbar?.querySelectorAll('.toolbar-mode-btn');
+    btns?.forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+    });
+
+    elements.maskControls?.classList.toggle('hidden', mode !== 'mask');
+    elements.expandControls?.classList.toggle('hidden', mode !== 'expand');
+
+    elements.maskCanvas.style.opacity = (mode === 'mask') ? '0.7' : '0';
+    elements.maskCanvas.style.pointerEvents = (mode === 'mask') ? 'auto' : 'none';
+    
+    // Auto-center expand box on mode enter if it isn't set up yet
+    if (mode === 'expand') {
+        elements.expandBox.classList.remove('hidden');
+        elements.expandBox.style.pointerEvents = 'auto';
+        elements.expandBox.style.cursor = 'move';
+        if (!elements.expandBox.style.width || elements.expandBox.style.width === "0px") {
+             const bounds = getRenderedImageBounds();
+             if (bounds) {
+                 elements.expandBox.style.width = bounds.width + 'px';
+                 elements.expandBox.style.height = bounds.height + 'px';
+                 elements.expandBox.style.left = bounds.left + 'px';
+                 elements.expandBox.style.top = bounds.top + 'px';
+             }
+        }
+    } else {
+        elements.expandBox.classList.add('hidden');
+        elements.expandBox.style.pointerEvents = 'none';
+    }
+}
+
+export function getRenderedImageBounds() {
+    const img = elements.mainImage;
+    if (!img) return null;
+    const ratio = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+    let width = img.offsetWidth;
+    let height = img.offsetHeight;
+    if (width / height > ratio) {
+        width = height * ratio;
+    } else {
+        height = width / ratio;
+    }
+    const left = (img.offsetWidth - width) / 2;
+    const top = (img.offsetHeight - height) / 2;
+    return { width, height, left, top };
+}
+
+function setupToolCanvases(imgRecord) {
+    // Match the canvas natural res to the image for 1:1 drawing
+    const img = elements.mainImage;
+    if (!img) return;
+
+    elements.canvasToolbar.classList.remove('hidden');
+
+    function syncDimensions() {
+        elements.maskCanvas.width = img.naturalWidth || 1024;
+        elements.maskCanvas.height = img.naturalHeight || 1024;
+        elements.maskCanvas.style.width = img.offsetWidth + 'px';
+        elements.maskCanvas.style.height = img.offsetHeight + 'px';
+        
+        // Reset expand box so it aligns nicely on new image
+        elements.expandBox.style.width = '0px';
+        if (state.canvasMode === 'expand') updateToolModes();
+    }
+
+    if (img.complete) {
+        syncDimensions();
+    } else {
+        img.onload = syncDimensions;
+    }
+}
+
+// Global drawing state
+let isDrawing = false;
+let maskCtx = null;
+
+function setupMaskDrawing() {
+    elements.maskCanvas.addEventListener('pointerdown', (e) => {
+        if (state.canvasMode !== 'mask') return;
+        if (window.isSpacebarDown || e.button === 1) return; // ignore panning
+        isDrawing = true;
+        
+        maskCtx = elements.maskCanvas.getContext('2d', { willReadFrequently: true });
+        maskCtx.lineCap = 'round';
+        maskCtx.lineJoin = 'round';
+        maskCtx.strokeStyle = 'rgba(255, 0, 0, 1)';
+        drawStroke(e, false);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+        if (!isDrawing) return;
+        drawStroke(e, true);
+    });
+
+    window.addEventListener('pointerup', () => {
+        isDrawing = false;
+    });
+
+    document.getElementById('clear-mask-btn')?.addEventListener('click', () => {
+        if (!maskCtx) maskCtx = elements.maskCanvas.getContext('2d');
+        maskCtx.clearRect(0, 0, elements.maskCanvas.width, elements.maskCanvas.height);
+    });
+}
+
+function drawStroke(e, lineTo) {
+    const rect = elements.maskCanvas.getBoundingClientRect();
+    const scaleX = elements.maskCanvas.width / rect.width;
+    const scaleY = elements.maskCanvas.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    maskCtx.lineWidth = (parseInt(elements.brushSlider?.value) || 40) * scaleX;
+    maskCtx.globalCompositeOperation = e.altKey ? 'destination-out' : 'source-over';
+
+    if (!lineTo) {
+        maskCtx.beginPath();
+        maskCtx.moveTo(x, y);
+    }
+    maskCtx.lineTo(x, y);
+    maskCtx.stroke();
+    
+    // Draw single dots on click
+    if (!lineTo) {
+        maskCtx.beginPath();
+        maskCtx.arc(x, y, maskCtx.lineWidth / 2, 0, Math.PI * 2);
+        maskCtx.fillStyle = 'rgba(255, 0, 0, 1)';
+        maskCtx.fill();
+        maskCtx.beginPath();
+        maskCtx.moveTo(x, y);
+    }
+}
+
+// Expand Crop Logic
+let activeDragHandle = null;
+let expandStartX, expandStartY, initialBoxRect;
+
+function setupExpandDragging() {
+    const box = elements.expandBox;
+    box.addEventListener('pointerdown', e => {
+        if (state.canvasMode !== 'expand') return;
+        
+        if (e.target.classList.contains('expand-handle')) {
+            activeDragHandle = e.target.dataset.handle;
+        } else if (e.target === box) {
+            activeDragHandle = 'pan';
+        } else {
+            return;
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        expandStartX = e.clientX;
+        expandStartY = e.clientY;
+        initialBoxRect = { 
+            left: parseFloat(box.style.left) || 0,
+            top: parseFloat(box.style.top) || 0,
+            width: parseFloat(box.style.width) || elements.mainImage.offsetWidth,
+            height: parseFloat(box.style.height) || elements.mainImage.offsetHeight 
+        };
+    });
+
+    window.addEventListener('pointermove', e => {
+        if (!activeDragHandle) return;
+        // Divide by globalCoordinateMapper.scale to move exactly alongside mouse visually
+        const dx = (e.clientX - expandStartX) / globalCoordinateMapper.scale;
+        const dy = (e.clientY - expandStartY) / globalCoordinateMapper.scale;
+        
+        const bounds = getRenderedImageBounds();
+        const origWidth = bounds ? bounds.width : elements.mainImage.offsetWidth;
+        const origHeight = bounds ? bounds.height : elements.mainImage.offsetHeight;
+        const origLeft = bounds ? bounds.left : 0;
+        const origTop = bounds ? bounds.top : 0;
+        const snapDist = 10;
+
+        if (activeDragHandle === 'pan') {
+            let nextLeft = initialBoxRect.left + dx;
+            let nextTop = initialBoxRect.top + dy;
+            
+            if (nextLeft > origLeft) nextLeft = origLeft;
+            if (nextLeft + initialBoxRect.width < origLeft + origWidth) {
+                nextLeft = origLeft + origWidth - initialBoxRect.width;
+            }
+            if (nextTop > origTop) nextTop = origTop;
+            if (nextTop + initialBoxRect.height < origTop + origHeight) {
+                nextTop = origTop + origHeight - initialBoxRect.height;
+            }
+
+            box.style.left = nextLeft + 'px';
+            box.style.top = nextTop + 'px';
+        } else if (activeDragHandle === 'r') {
+            let w = Math.max(origWidth, initialBoxRect.width + dx);
+            if (Math.abs(w - origWidth) < snapDist) w = origWidth;
+            box.style.width = w + 'px';
+        } else if (activeDragHandle === 'l') {
+            let w = Math.max(origWidth, initialBoxRect.width - dx);
+            let l = initialBoxRect.left + (initialBoxRect.width - w);
+            if (Math.abs(l - origLeft) < snapDist || l > origLeft) {
+                l = origLeft;
+                w = initialBoxRect.left + initialBoxRect.width - origLeft;
+            }
+            box.style.width = w + 'px';
+            box.style.left = l + 'px';
+        } else if (activeDragHandle === 'b') {
+            let h = Math.max(origHeight, initialBoxRect.height + dy);
+            if (Math.abs(h - origHeight) < snapDist) h = origHeight;
+            box.style.height = h + 'px';
+        } else if (activeDragHandle === 't') {
+            let h = Math.max(origHeight, initialBoxRect.height - dy);
+            let t = initialBoxRect.top + (initialBoxRect.height - h);
+            if (Math.abs(t - origTop) < snapDist || t > origTop) {
+                t = origTop;
+                h = initialBoxRect.top + initialBoxRect.height - origTop;
+            }
+            box.style.height = h + 'px';
+            box.style.top = t + 'px';
+        }
+    });
+
+    window.addEventListener('pointerup', () => {
+        activeDragHandle = null;
+    });
+
+    document.querySelectorAll('.expand-ratio-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.expand-ratio-btn').forEach(b => b.classList.remove('btn-primary'));
+            e.target.classList.add('btn-primary');
+            
+            const ratioStr = e.target.dataset.ratio;
+            if (ratioStr === 'free') return;
+            const rw = parseInt(ratioStr.split(':')[0], 10);
+            const rh = parseInt(ratioStr.split(':')[1], 10);
+            
+            const bounds = getRenderedImageBounds();
+            const origW = bounds ? bounds.width : elements.mainImage.offsetWidth;
+            const origH = bounds ? bounds.height : elements.mainImage.offsetHeight;
+            
+            let newW = Math.max(origW, origH * (rw / rh));
+            let newH = Math.max(origH, origW * (rh / rw));
+
+            box.style.width = newW + 'px';
+            box.style.height = newH + 'px';
+        });
+    });
+
+    document.getElementById('reset-expand-btn')?.addEventListener('click', () => {
+        if (!elements.mainImage || !elements.expandBox) return;
+        const bounds = getRenderedImageBounds();
+        if (bounds) {
+            elements.expandBox.style.width = bounds.width + 'px';
+            elements.expandBox.style.height = bounds.height + 'px';
+            elements.expandBox.style.left = bounds.left + 'px';
+            elements.expandBox.style.top = bounds.top + 'px';
+        }
+        document.querySelectorAll('.expand-ratio-btn').forEach(b => b.classList.remove('btn-primary'));
+        document.querySelector('.expand-ratio-btn[data-ratio="free"]')?.classList.add('btn-primary');
+    });
+}
+
+
+/**
+ * Export getters to pull mathematical DOM bounds during Execution.
+ */
+export function getMaskBase64() {
+    if (!elements.maskCanvas) return null;
+    
+    // Check if empty
+    const ctx = elements.maskCanvas.getContext('2d');
+    const pixelData = ctx.getImageData(0, 0, elements.maskCanvas.width, elements.maskCanvas.height).data;
+    let hasPixels = false;
+    for (let i = 3; i < pixelData.length; i += 4) {
+        if (pixelData[i] > 0) { hasPixels = true; break; }
+    }
+    if (!hasPixels) return null;
+    
+    // Bria mask requires B/W. 
+    // We drew red, so let's physically map alpha > 0 to WHITE and alpha === 0 to BLACK,
+    // though usually Bria expects white where edit occurs, black out of bounds.
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = elements.maskCanvas.width;
+    tempCanvas.height = elements.maskCanvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.fillStyle = 'black';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    
+    // Replace non-transparent with white
+    const idata = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const d = idata.data;
+    for (let i = 0; i < d.length; i += 4) {
+        if (d[i+3] > 0) {
+            d[i] = 255; d[i+1] = 255; d[i+2] = 255; d[i+3] = 255;
+        } else {
+            d[i] = 0; d[i+1] = 0; d[i+2] = 0; d[i+3] = 255;
+        }
+    }
+    tempCtx.putImageData(idata, 0, 0);
+    return tempCanvas.toDataURL('image/png');
+}
+
+export function getExpandBounds() {
+    if (!elements.expandBox) return null;
+    const box = elements.expandBox;
+    const img = elements.mainImage;
+    
+    const bounds = getRenderedImageBounds();
+    if (!bounds) return null;
+
+    // Scale factor from screen pixels (rendered image) to actual natural pixels
+    const cssScale = (img.naturalWidth || 1024) / bounds.width;
+    
+    const boxW = parseFloat(box.style.width) || bounds.width;
+    const boxH = parseFloat(box.style.height) || bounds.height;
+    const boxL = parseFloat(box.style.left) || 0;
+    const boxT = parseFloat(box.style.top) || 0;
+
+    // Output dimensions
+    const outWidth = Math.round(boxW * cssScale);
+    const outHeight = Math.round(boxH * cssScale);
+    
+    // The box's position relative to the image's visual top-left corner
+    const relativeLeft = boxL - bounds.left;
+    const relativeTop = boxT - bounds.top;
+
+    const offsetLeftPx = Math.round(relativeLeft * cssScale);
+    const offsetTopPx = Math.round(relativeTop * cssScale);
+
+    // The Bria API offset implies "where is the original image located relative to the new Top-Left of the expanded canvas?"
+    // If the box is drawn to the left of the image (relativeLeft < 0), the original image sits INSIDE the new canvas at a positive offset.
+    const finalOffset = [
+        Math.max(0, -offsetLeftPx),
+        Math.max(0, -offsetTopPx)
+    ];
+
+    return {
+        canvas: [outWidth, outHeight],
+        original_image_size: [img.naturalWidth || 1024, img.naturalHeight || 1024],
+        offset: finalOffset
+    };
+}
+
+
 /**
  * Reset zoom to Fit mode (default).
  */
@@ -385,11 +860,50 @@ function resetZoom() {
  * Zoom to Fit — scale=1 + centered (CSS handles contain scaling).
  */
 export function zoomToFit() {
-    zoomState.scale = 1;
-    zoomState.translateX = 0;
-    zoomState.translateY = 0;
+    if (!elements.mainImage || !elements.viewerWrapper) {
+        globalCoordinateMapper.setTransform(1, 0, 0);
+        zoomMode = 'fit';
+        applyZoom(true);
+        state.emit('zoomChanged', getZoomState());
+        return;
+    }
+
+    const img = elements.mainImage;
+    const wrapper = elements.viewerWrapper;
+    const promptBar = document.getElementById('prompt-bar');
+    
+    const wrapW = wrapper.clientWidth;
+    const wrapH = wrapper.clientHeight;
+    let visibleH = wrapH;
+    
+    // If prompt bar exists and is open, calculate visible area above it
+    if (promptBar && !promptBar.classList.contains('collapsed')) {
+        const wrapRect = wrapper.getBoundingClientRect();
+        const promptRect = promptBar.getBoundingClientRect();
+        
+        // Find how much of the wrapper is physically above the prompt bar (plus a small gap)
+        const spaceAbovePrompt = promptRect.top - wrapRect.top - 20; 
+        if (spaceAbovePrompt > 100 && spaceAbovePrompt < visibleH) {
+            visibleH = spaceAbovePrompt;
+        }
+    }
+
+    const naturalW = img.naturalWidth || 512;
+    const naturalH = img.naturalHeight || 512;
+    
+    const containScale = Math.min(wrapW / naturalW, wrapH / naturalH);
+    const fitScale = Math.min(wrapW / naturalW, visibleH / naturalH);
+    
+    // The required CSS scale relative to the browser's native contain scale
+    const newScale = containScale > 0 ? fitScale / containScale : 1;
+    
+    // Pan to center the image within the newly calculated visible area
+    const newTx = (wrapW / 2) * (1 - newScale);
+    const newTy = (visibleH / 2) - (wrapH / 2) * newScale;
+
+    globalCoordinateMapper.setTransform(newScale, newTx, newTy);
     zoomMode = 'fit';
-    applyZoom();
+    applyZoom(true);
     state.emit('zoomChanged', getZoomState());
 }
 
@@ -409,12 +923,21 @@ export function zoomTo100() {
     const wrapW = wrapper.clientWidth;
     const wrapH = wrapper.clientHeight;
     const containScale = Math.min(wrapW / naturalW, wrapH / naturalH);
+    
     // Multiply by 1/containScale so the net display scale is 1.0 (100%)
-    zoomState.scale = containScale > 0 ? 1 / containScale : 1;
-    zoomState.translateX = 0;
-    zoomState.translateY = 0;
+    const newScale = containScale > 0 ? 1 / containScale : 1;
+    
+    // Center the image itself to the center of the viewport
+    const cx = wrapW / 2;
+    const cy = wrapH / 2;
+    
+    // Calculate translation to keep the physical center of the image centered
+    const newTx = cx * (1 - newScale);
+    const newTy = cy * (1 - newScale);
+
+    globalCoordinateMapper.setTransform(newScale, newTx, newTy);
     zoomMode = '100';
-    applyZoom();
+    applyZoom(true);
     state.emit('zoomChanged', getZoomState());
 }
 
@@ -427,10 +950,26 @@ function handleWheel(e) {
 
     const delta = -e.deltaY;
     const factor = delta > 0 ? 1.1 : 0.9;
-    const newScale = Math.max(0.1, Math.min(10, zoomState.scale * factor));
+    const currentScale = globalCoordinateMapper.scale;
+    const newScale = Math.max(0.1, Math.min(10, currentScale * factor));
 
-    if (newScale !== zoomState.scale) {
-        zoomState.scale = newScale;
+    if (newScale !== currentScale) {
+        // Use viewerWrapper so the reference frame is STATIC, avoiding drift/curves
+        const rect = elements.viewerWrapper.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+
+        // Calculate the canvas coordinate under the cursor before zoom
+        const px = (cx - globalCoordinateMapper.translateX) / currentScale;
+        const py = (cy - globalCoordinateMapper.translateY) / currentScale;
+
+        // Apply new scale
+        globalCoordinateMapper.scale = newScale;
+        
+        // Adjust translation so the canvas coordinate remains under the cursor
+        globalCoordinateMapper.translateX = cx - (px * newScale);
+        globalCoordinateMapper.translateY = cy - (py * newScale);
+
         zoomMode = 'custom';
         applyZoom();
         state.emit('zoomChanged', getZoomState());
@@ -441,10 +980,20 @@ function handleWheel(e) {
  * Start panning.
  */
 function startPan(e) {
-    if (zoomState.scale <= 1 || e.button !== 0) return;
-    zoomState.isPanning = true;
-    zoomState.startX = e.clientX - zoomState.translateX;
-    zoomState.startY = e.clientY - zoomState.translateY;
+    // Allow panning with middle click or left click
+    if (e.button !== 0 && e.button !== 1) return;
+    
+    const isPanOverride = (e.button === 1 || window.isSpacebarDown);
+    
+    if (!isPanOverride) {
+        // If not overriding, only allow left-click pan in view/expand modes
+        // Expand handles use stopPropagation so they won't trigger this
+        if (state.canvasMode !== 'view' && state.canvasMode !== 'expand') return;
+    }
+
+    interactionState.isPanning = true;
+    interactionState.startX = e.clientX - globalCoordinateMapper.translateX;
+    interactionState.startY = e.clientY - globalCoordinateMapper.translateY;
     elements.viewerWrapper.style.cursor = 'grabbing';
 }
 
@@ -452,9 +1001,9 @@ function startPan(e) {
  * Do panning.
  */
 function doPan(e) {
-    if (!zoomState.isPanning) return;
-    zoomState.translateX = e.clientX - zoomState.startX;
-    zoomState.translateY = e.clientY - zoomState.startY;
+    if (!interactionState.isPanning) return;
+    globalCoordinateMapper.translateX = e.clientX - interactionState.startX;
+    globalCoordinateMapper.translateY = e.clientY - interactionState.startY;
     applyZoom();
     state.emit('zoomChanged', getZoomState());
 }
@@ -463,17 +1012,21 @@ function doPan(e) {
  * End panning.
  */
 function endPan() {
-    if (!zoomState.isPanning) return;
-    zoomState.isPanning = false;
+    if (!interactionState.isPanning) return;
+    interactionState.isPanning = false;
     elements.viewerWrapper.style.cursor = '';
 }
 
 /**
- * Apply zoom and pan transforms to the main image.
+ * Apply zoom and pan transforms to the main image layer.
  */
-function applyZoom() {
-    if (!elements.mainImage) return;
-    elements.mainImage.style.transform = `translate(${zoomState.translateX}px, ${zoomState.translateY}px) scale(${zoomState.scale})`;
+function applyZoom(animated = false) {
+    if (!elements.transformLayer) return;
+    
+    // Disable transitions during scroll/pan to prevent lag/curved paths
+    elements.transformLayer.style.transition = animated ? 'transform 0.25s ease-out' : 'none';
+    
+    elements.transformLayer.style.transform = `translate(${globalCoordinateMapper.translateX}px, ${globalCoordinateMapper.translateY}px) scale(${globalCoordinateMapper.scale})`;
 
     // Update indicator text
     if (elements.zoomIndicator) {
@@ -482,7 +1035,7 @@ function applyZoom() {
         } else if (zoomMode === '100') {
             elements.zoomIndicator.textContent = '100%';
         } else {
-            elements.zoomIndicator.textContent = `${Math.round(zoomState.scale * 100)}%`;
+            elements.zoomIndicator.textContent = `${Math.round(globalCoordinateMapper.scale * 100)}%`;
         }
     }
 
@@ -495,7 +1048,14 @@ function applyZoom() {
  * Get current zoom state for external sync.
  */
 export function getZoomState() {
-    return { ...zoomState };
+    return {
+        scale: globalCoordinateMapper.scale,
+        translateX: globalCoordinateMapper.translateX,
+        translateY: globalCoordinateMapper.translateY,
+        isPanning: interactionState.isPanning,
+        startX: interactionState.startX,
+        startY: interactionState.startY
+    };
 }
 
 /**
@@ -537,8 +1097,14 @@ function updateView() {
 function updateFeaturedImage() {
     const img = state.getFeaturedImage();
     if (!img) {
-        elements.imageViewer.classList.add('hidden');
-        elements.welcomeScreen.classList.remove('hidden');
+        // If loading, stay in viewer so we see the spinner
+        if (state.isLoading) {
+             elements.imageViewer.classList.remove('hidden');
+             elements.welcomeScreen.classList.add('hidden');
+        } else {
+             elements.imageViewer.classList.add('hidden');
+             elements.welcomeScreen.classList.remove('hidden');
+        }
         return;
     }
 
@@ -559,10 +1125,15 @@ function updateFeaturedImage() {
  * Update loading overlay.
  */
 function updateLoadingState() {
-    const show = !!state.canvasLoading;
+    const show = !!state.isLoading && !!state.canvasLoading;
     if (elements.loadingOverlay) elements.loadingOverlay.classList.toggle('hidden', !show);
     if (show && elements.loadingText) {
-        elements.loadingText.textContent = state.loadingText || 'Generating…';
+        elements.loadingText.textContent = state.loadingText || 'Processing…';
+        // Force viewer visible if we have a project
+        if (state.getActiveProject()) {
+            elements.imageViewer.classList.remove('hidden');
+            elements.welcomeScreen.classList.add('hidden');
+        }
     }
 }
 

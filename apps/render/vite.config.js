@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 import { storageMiddleware } from './src/server-bridge.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ command }) => ({
   plugins: [
@@ -11,6 +15,12 @@ export default defineConfig(({ command }) => ({
       }
     }] : [])
   ],
+  resolve: {
+    alias: {
+      '@arc/core': path.resolve(__dirname, '../../packages/core/src/index.js'),
+      '@arc/data': path.resolve(__dirname, '../../packages/data/src/index.js')
+    }
+  },
   server: {
     // Dev-only proxy: forwards /api → Bria's engine
     // In production, api.js switches API_BASE to the direct URL via import.meta.env.PROD

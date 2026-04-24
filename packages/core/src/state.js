@@ -62,10 +62,26 @@ const state = {
     compareImageId: null,
     /** @type {boolean} */
     compareActive: false,
+    /** @type {Set<string>} */
+    selectedImageIds: new Set(),
     /** @type {number} */
     wipePosition: 0.5,
-    /** @type {boolean} */
-    isLoading: false,
+    /** @type {'view'|'mask'|'expand'} */
+    canvasMode: 'view',
+    /** @type {Object<string, { text: string, canvasLoading: boolean }>} */
+    activeJobs: {},
+
+    setCanvasMode(mode) {
+        if (this.canvasMode !== mode) {
+            this.canvasMode = mode;
+            this.emit('canvasModeChanged');
+        }
+    },
+
+    get isLoading() { return !!this.activeJobs[this.activeProjectId]; },
+    get loadingText() { return this.activeJobs[this.activeProjectId]?.text || 'Generating…'; },
+    get canvasLoading() { return !!this.activeJobs[this.activeProjectId]?.canvasLoading; },
+
     /** @type {string|null} */
     errorMessage: null,
     /** @type {string} */
@@ -195,6 +211,10 @@ const state = {
         return ok;
     },
 
+    getFolderName() {
+        return dataDB.rootDir?.name || 'Local Folder';
+    },
+
     /**
      * Let the user skip FS storage and use localStorage instead.
      */
@@ -275,6 +295,8 @@ const state = {
             localStorage.removeItem(STORAGE_ACTIVE_KEY);
         }
 
+        delete this.activeJobs[projectId];
+
         if (this._useFS()) {
             await dataDB.deleteWorkspace(projectId);
         } else {
@@ -289,11 +311,11 @@ const state = {
     // ============================================================
 
     /**
-     * Add a single image to the active project.
+     * Add a single image to the active project (or a specific target project).
      * Persists the PNG file immediately if using filesystem storage.
      */
-    async addImage(img, prompt, mode, batchId, parentImageId = null) {
-        const project = this.getActiveProject();
+    async addImage(img, prompt, mode, batchId, parentImageId = null, targetProjectId = null) {
+        const project = targetProjectId ? this.projects[targetProjectId] : this.getActiveProject();
         if (!project) return null;
 
         // ── Version assignment ──
@@ -346,13 +368,17 @@ const state = {
         }
 
         project.images.unshift(imageRecord);
-        this.featuredImageId = imageRecord.id;
+
+        // Optional: If you generated a background image for an old project, you do not want it to arbitrarily hijack the UI focus on the *current* active project view.
+        if (project.id === this.activeProjectId) {
+            this.featuredImageId = imageRecord.id;
+        }
 
         // Persist: PNG file first (only FS mode), then project.json / localStorage
         if (this._useFS()) {
             await dataDB.saveImage(imageRecord, img.base64);
         }
-        await this.save();
+        await this.save(project.id);
 
         this.emit('imagesAdded', { batchId, images: [imageRecord] });
         this.emit('featuredChanged');
@@ -363,6 +389,25 @@ const state = {
         for (const p of Object.values(this.projects)) {
             const img = p.images.find(i => i.id === imageId);
             if (img) return img;
+        }
+        return null;
+    },
+
+    async resolveImageBase64(imageId) {
+        const img = this.getImage(imageId);
+        if (!img) return null;
+        if (img.base64) return img.base64;
+        
+        if (this._storageType === 'fs') {
+            try {
+                const b64 = await dataDB.getImageBase64(img.id);
+                if (b64) {
+                    img.base64 = b64;
+                    return b64;
+                }
+            } catch (err) {
+                console.error('Failed to resolve base64 for image:', imageId, err);
+            }
         }
         return null;
     },
@@ -406,7 +451,17 @@ const state = {
         const img = this.getImage(imageId);
         if (img) {
             img.isStarred = !img.isStarred;
-            this.save();
+            
+            // Find which project this image belongs to for targeted saving
+            let targetProjectId = this.activeProjectId;
+            for (const pid in this.projects) {
+                if (this.projects[pid].images.some(i => i.id === imageId)) {
+                    targetProjectId = pid;
+                    break;
+                }
+            }
+
+            this.save(targetProjectId);
             this.emit('imageStarred', { imageId, isStarred: img.isStarred });
         }
     },
@@ -505,6 +560,27 @@ const state = {
     },
 
     // ============================================================
+    // MULTI-SELECTION
+    // ============================================================
+    
+    toggleSelection(imageId) {
+        if (!imageId) return;
+        if (this.selectedImageIds.has(imageId)) {
+            this.selectedImageIds.delete(imageId);
+        } else {
+            this.selectedImageIds.add(imageId);
+        }
+        this.emit('selectionChanged');
+    },
+
+    clearSelection() {
+        if (this.selectedImageIds.size > 0) {
+            this.selectedImageIds.clear();
+            this.emit('selectionChanged');
+        }
+    },
+
+    // ============================================================
     // COMPARE
     // ============================================================
 
@@ -555,26 +631,46 @@ const state = {
     // LOADING / ERROR
     // ============================================================
 
-    setLoading(loading, text) {
-        const wasLoading = this.isLoading;
-        this.isLoading = loading;
-        this.loadingText = text || 'Generating…';
-        // Only show the canvas overlay when starting a *new* loading session.
-        // Mid-batch status-text updates (wasLoading already true) must not
-        // override an explicit setCanvasLoading(false) call.
-        if (loading && !wasLoading) this.canvasLoading = true;
-        if (!loading) this.canvasLoading = false;
+    setLoading(loading, text, projectId = null) {
+        const pId = projectId || this.activeProjectId;
+        if (!pId) return;
+
+        const wasLoading = !!this.activeJobs[pId];
+
+        if (loading) {
+            if (!wasLoading) {
+                this.activeJobs[pId] = { text: text || 'Generating…', canvasLoading: true };
+            } else {
+                this.activeJobs[pId].text = text || 'Generating…';
+            }
+        } else {
+            delete this.activeJobs[pId];
+        }
+
         this.emit('loadingChanged');
         this.emit('canvasLoadingChanged');
+        this.emit('backgroundJobsChanged');
     },
 
     /**
      * Hide just the canvas overlay while isLoading (and the interrupt button) stay active.
-     * Call this after the first image arrives so the user can interact with it immediately.
      */
-    setCanvasLoading(loading) {
-        this.canvasLoading = loading;
+    setCanvasLoading(loading, projectId = null) {
+        const pId = projectId || this.activeProjectId;
+        if (!pId || !this.activeJobs[pId]) return;
+        this.activeJobs[pId].canvasLoading = loading;
         this.emit('canvasLoadingChanged');
+    },
+
+    getBackgroundJobs() {
+        const bg = [];
+        for (const [pId, job] of Object.entries(this.activeJobs)) {
+            if (pId !== this.activeProjectId) {
+                const proj = this.projects[pId];
+                if (proj) bg.push({ projectId: pId, projectName: proj.name, text: job.text });
+            }
+        }
+        return bg;
     },
 
     setError(message) {
@@ -637,7 +733,7 @@ const state = {
         if (!project) return;
         if (!project.batchNotes) project.batchNotes = {};
         project.batchNotes[batchId] = note;
-        this.save();
+        this.save(project.id);
     },
 
     getBatchNote(batchId) {
@@ -675,8 +771,9 @@ const state = {
     // SAVE (dispatcher)
     // ============================================================
 
-    async save() {
-        const project = this.getActiveProject();
+    async save(projectId = null) {
+        const idToSave = projectId || this.activeProjectId;
+        const project = idToSave ? this.projects[idToSave] : null;
         if (!project) return;
 
         if (this._useFS()) {

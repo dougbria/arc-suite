@@ -645,3 +645,51 @@ export function findDiffPaths(oldObj, newObj, path = '') {
 
     return diffs;
 }
+
+// ============================================================
+// COORDINATE MAPPER
+// ============================================================
+
+/**
+ * CoordinateMapper provides centralized math for mapping viewport 
+ * (mouse/DOM) coordinates to the high-res image coordinate space.
+ */
+export class CoordinateMapper {
+    constructor() {
+        this.scale = 1;
+        this.translateX = 0;
+        this.translateY = 0;
+    }
+
+    setTransform(scale, tx, ty) {
+        this.scale = scale;
+        this.translateX = tx;
+        this.translateY = ty;
+    }
+
+    get scaleFactor() {
+        return this.scale;
+    }
+
+    applyPan(dx, dy) {
+        this.translateX += dx;
+        this.translateY += dy;
+    }
+
+    applyZoom(factor, min = 0.1, max = 10) {
+        this.scale = Math.max(min, Math.min(max, this.scale * factor));
+    }
+
+    /**
+     * Converts a DOM/viewport coordinate to the canvas/image coordinate.
+     */
+    screenToCanvas(screenX, screenY) {
+        return {
+            x: (screenX - this.translateX) / this.scale,
+            y: (screenY - this.translateY) / this.scale
+        };
+    }
+}
+
+// Global instance to be shared across Canvas and Layout modules
+export const globalCoordinateMapper = new CoordinateMapper();

@@ -50,6 +50,9 @@ export class PromptBar {
                   <button id="btn-generate" class="btn btn-primary combo-primary" title="Generate New">✨ Generate</button>
                   <button id="btn-refine" class="btn btn-secondary combo-segment" disabled title="Refine generated image">⟲ Refine</button>
                   <button id="btn-edit" class="btn btn-secondary combo-segment" disabled title="Edit image">✎ Edit</button>
+                  <button id="btn-expand" class="btn btn-secondary combo-segment" disabled title="Expand using outpainting box">📐 Expand</button>
+                  <button id="btn-layout" class="btn btn-secondary combo-segment" disabled title="Enter layout mode to composite multiple images">🖼 Layout</button>
+                  <button id="btn-synthesize" class="btn btn-secondary combo-segment hidden" title="Synthesize multiple selected images">🧪 Synthesize</button>
                 </div>
                 <!-- Integrated Progress/Cancel Button -->
                 <button id="btn-interrupt" class="btn btn-primary btn-progress hidden">
@@ -61,33 +64,35 @@ export class PromptBar {
               <!-- Quick Settings (Count, Ratio, Seed) -->
               <div class="prompt-quick-settings">
                   <div class="quick-params-row">
-                    <div class="param-item">
+                    <div class="param-item custom-dropdown-wrap">
                       <label>Count</label>
-                      <select id="image-count-select">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4" selected>4</option>
-                      </select>
+                      <button id="image-count-btn" class="custom-dropdown-btn">4</button>
+                      <div id="image-count-menu" class="custom-dropdown-menu hidden">
+                        <button class="dropdown-option" data-value="1">1</button>
+                        <button class="dropdown-option" data-value="2">2</button>
+                        <button class="dropdown-option" data-value="3">3</button>
+                        <button class="dropdown-option active" data-value="4">4</button>
+                      </div>
                     </div>
-                    <div class="param-item">
+                    <div class="param-item custom-dropdown-wrap">
                       <label>Ratio</label>
-                      <select id="aspect-ratio-select">
-                        <option value="">Auto</option>
-                        <option value="1:1">1:1</option>
-                        <option value="2:3">2:3</option>
-                        <option value="3:2">3:2</option>
-                        <option value="4:5">4:5</option>
-                        <option value="5:4">5:4</option>
-                        <option value="9:16">9:16</option>
-                        <option value="16:9">16:9</option>
-                        <option value="9:21">9:21</option>
-                        <option value="21:9">21:9</option>
-                      </select>
+                      <button id="aspect-ratio-btn" class="custom-dropdown-btn">Auto</button>
+                      <div id="aspect-ratio-menu" class="custom-dropdown-menu hidden">
+                        <button class="dropdown-option active" data-value="">Auto</button>
+                        <button class="dropdown-option" data-value="1:1">1:1</button>
+                        <button class="dropdown-option" data-value="16:9">16:9</button>
+                        <button class="dropdown-option" data-value="9:16">9:16</button>
+                        <button class="dropdown-option" data-value="4:3">4:3</button>
+                        <button class="dropdown-option" data-value="3:4">3:4</button>
+                      </div>
                     </div>
-                    <div class="param-item seed-item">
+                    <div class="param-item custom-dropdown-wrap seed-item">
                       <label>Seed</label>
-                      <input type="number" id="seed-input" placeholder="Random" title="Leave empty for a random seed each time" />
+                      <button id="seed-popover-btn" class="custom-dropdown-btn" title="Random Seed">🎲 Auto</button>
+                      <div id="seed-popover-menu" class="custom-dropdown-menu hidden" style="padding:8px; min-width: 140px;">
+                        <input type="number" id="seed-input" class="prompt-input" style="width:100%; margin-bottom:8px;" placeholder="Random..." />
+                        <button id="seed-random-btn" class="btn btn-sm btn-secondary" style="width:100%">🎲 Randomize</button>
+                      </div>
                     </div>
                   </div>
               </div>
@@ -103,78 +108,71 @@ export class PromptBar {
           <details class="prompt-advanced-details">
             <summary class="advanced-summary">Advanced Settings</summary>
             <div class="advanced-grid">
-
-              <!-- Negative Prompt -->
-              <div class="neg-prompt-group">
+              <!-- 1. Negative Prompt (Extended text box) -->
+              <div class="neg-prompt-group full-width">
                 <label for="negative-prompt-input">Negative Prompt</label>
-                <input type="text" id="negative-prompt-input" class="neg-prompt-input" placeholder="Exclude things…" />
+                <textarea id="negative-prompt-input" class="neg-prompt-input" rows="2" placeholder="Objects, styles, or colors to exclude…"></textarea>
               </div>
 
-              <!-- Resolution -->
-              <div class="param-item res-param">
-                <label>Resolution</label>
-                <select id="resolution-select">
-                  <option value="1MP" selected>1MP</option>
-                  <option value="4MP">4MP</option>
-                </select>
+              <!-- 2. Generation Quality/Mode Options (just below neg prompt) -->
+              <div class="advanced-row-wrap">
+                  <div class="param-item">
+                    <label>Resolution</label>
+                    <select id="resolution-select">
+                      <option value="1MP" selected>1MP</option>
+                      <option value="4MP">4MP</option>
+                    </select>
+                  </div>
+                  <div class="toggle-item">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="lite-mode-toggle" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label">Lite Mode</span>
+                  </div>
+                   <div class="toggle-item">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="preview-sp-checkbox" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label">Preview VGL</span>
+                  </div>
               </div>
 
-              <!-- Toggles Grid -->
-              <div class="toggles-grid">
-                <div class="toggle-item">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="lite-mode-toggle" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">Lite Mode</span>
-                </div>
-                <div class="toggle-item">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="mod-content-toggle" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">Content Mod</span>
-                </div>
-                <div class="toggle-item">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="mod-input-toggle" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">Input Mod</span>
-                </div>
-                <div class="toggle-item">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="mod-output-toggle" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">Output Mod</span>
-                </div>
-                <div class="toggle-item">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="ip-signal-toggle" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">IP Signal</span>
-                </div>
-                <div class="toggle-item">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="preview-sp-checkbox" />
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">Preview SP</span>
-                </div>
+              <!-- 3. Content Moderation Group -->
+              <div class="moderation-group">
+                  <h4 class="settings-sub-label">Content Moderation</h4>
+                  <div class="toggles-grid">
+                     <div class="toggle-item">
+                        <label class="toggle-switch">
+                          <input type="checkbox" id="mod-content-toggle" />
+                          <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Content</span>
+                     </div>
+                     <div class="toggle-item">
+                        <label class="toggle-switch">
+                          <input type="checkbox" id="mod-input-toggle" />
+                          <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Input</span>
+                     </div>
+                     <div class="toggle-item">
+                        <label class="toggle-switch">
+                          <input type="checkbox" id="mod-output-toggle" />
+                          <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Output</span>
+                     </div>
+                     <div class="toggle-item">
+                        <label class="toggle-switch">
+                          <input type="checkbox" id="ip-signal-toggle" />
+                          <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">IP Signal</span>
+                     </div>
+                  </div>
               </div>
-
-              <!-- API Key Management -->
-              <div class="api-key-advanced">
-                <label for="api-key-input" class="api-key-label">Bria API Token</label>
-                <div class="api-key-row">
-                  <input type="password" id="api-key-input" class="api-key-input" placeholder="Enter Bria API token…"
-                    autocomplete="off" />
-                  <button id="api-key-toggle" class="icon-btn" title="Show/hide key">👁</button>
-                </div>
-              </div>
-
             </div>
           </details>
         </div>

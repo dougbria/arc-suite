@@ -10,11 +10,12 @@ import { createThumbnail, showToast, generateUUID } from './utils.js';
  * Handle image enhancement (upscale to 4MP via Creative Enhancer).
  */
 export async function enhanceImage(imageId, options = {}) {
-    const project = state.getActiveProject();
-    const img = project.images.find(i => i.id === imageId);
+    const initialProjectId = state.activeProjectId;
+    const project = state.projects[initialProjectId];
+    const img = project?.images.find(i => i.id === imageId);
     if (!img) return;
-    
-    state.setLoading(true, 'Creative Enhancer — processing…');
+
+    state.setLoading(true, 'Creative Enhancer — processing…', initialProjectId);
     try {
         const result = await api.enhance(img.base64, img.seed, {
             mod_content: options.modContent,
@@ -23,13 +24,13 @@ export async function enhanceImage(imageId, options = {}) {
         });
 
         const thumbnail = await createThumbnail(result.base64, 200);
-        await state.addImage({ ...result, thumbnail }, 'Creative Enhancer', 'Enhance', generateUUID(), img.id);
+        await state.addImage({ ...result, thumbnail }, 'Creative Enhancer', 'Enhance', generateUUID(), img.id, initialProjectId);
         showToast('Creative Enhancer complete!');
     } catch (err) {
         console.error('Enhance error:', err);
         state.setError('Creative Enhancer failed: ' + err.message);
     } finally {
-        state.setLoading(false);
+        state.setLoading(false, null, initialProjectId);
     }
 }
 
@@ -37,7 +38,8 @@ export async function enhanceImage(imageId, options = {}) {
  * Core image generation action.
  */
 export async function generateImage(prompt, seed, count, options = {}) {
-    state.setLoading(true, count > 1 ? `Generating ${count} images…` : 'Generating image…');
+    const initialProjectId = state.activeProjectId;
+    state.setLoading(true, count > 1 ? `Generating ${count} images…` : 'Generating image…', initialProjectId);
     state.clearError();
 
     const parentId = options.parentImageId || null;
@@ -49,16 +51,17 @@ export async function generateImage(prompt, seed, count, options = {}) {
         for (let i = 0; i < count; i++) {
             // If it's a batch, we might want to vary the seed if it was 'random'
             const currentSeed = (seed === null || seed === 0) ? -1 : seed;
-            
+
             const p = api.generate(prompt, currentSeed, options.inputImageBase64, options)
                 .then(async (result) => {
                     const thumbnail = await createThumbnail(result.base64, 200);
                     return await state.addImage(
-                        { ...result, thumbnail }, 
-                        prompt, 
-                        mode, 
-                        batchId, 
-                        parentId
+                        { ...result, thumbnail },
+                        prompt,
+                        mode,
+                        batchId,
+                        parentId,
+                        initialProjectId
                     );
                 });
             promises.push(p);
@@ -72,7 +75,7 @@ export async function generateImage(prompt, seed, count, options = {}) {
         state.setError('Generation failed: ' + err.message);
         throw err;
     } finally {
-        state.setLoading(false);
+        state.setLoading(false, null, initialProjectId);
     }
 }
 
@@ -80,11 +83,12 @@ export async function generateImage(prompt, seed, count, options = {}) {
  * Increase image resolution by 2x or 4x.
  */
 export async function increaseResolution(imageId, scaleFactor = 2) {
-    const project = state.getActiveProject();
+    const initialProjectId = state.activeProjectId;
+    const project = state.projects[initialProjectId];
     const img = project?.images.find(i => i.id === imageId);
     if (!img) return;
 
-    state.setLoading(true, `Increasing resolution ${scaleFactor}×…`);
+    state.setLoading(true, `Increasing resolution ${scaleFactor}×…`, initialProjectId);
     try {
         const result = await api.increaseResolution(img.base64, scaleFactor);
 
@@ -94,25 +98,27 @@ export async function increaseResolution(imageId, scaleFactor = 2) {
             `Resolution ${scaleFactor}x`,
             'Enhance',
             generateUUID(),
-            img.id
+            img.id,
+            initialProjectId
         );
         showToast(`Resolution increased ${scaleFactor}×!`);
     } catch (err) {
         console.error('Increase resolution error:', err);
         state.setError(`Increase resolution failed: ${err.message}`);
     } finally {
-        state.setLoading(false);
+        state.setLoading(false, null, initialProjectId);
     }
 }
 /**
  * Remove image background.
  */
 export async function removeBackground(imageId, options = {}) {
-    const project = state.getActiveProject();
+    const initialProjectId = state.activeProjectId;
+    const project = state.projects[initialProjectId];
     const img = project?.images.find(i => i.id === imageId);
     if (!img) return;
 
-    state.setLoading(true, 'Removing background…');
+    state.setLoading(true, 'Removing background…', initialProjectId);
     try {
         const result = await api.removeBackground(img.base64, { signal: options.signal });
         const thumbnail = await createThumbnail(result.base64, 200);
@@ -121,14 +127,15 @@ export async function removeBackground(imageId, options = {}) {
             'Removed Background',
             'edit',
             generateUUID(),
-            img.id
+            img.id,
+            initialProjectId
         );
         showToast('Background removed!');
     } catch (err) {
         console.error('Remove background error:', err);
         state.setError('Remove Background failed: ' + err.message);
     } finally {
-        state.setLoading(false);
+        state.setLoading(false, null, initialProjectId);
     }
 }
 
@@ -138,11 +145,12 @@ export async function removeBackground(imageId, options = {}) {
  * @param {string} objectDescription - Short text describing the object to erase
  */
 export async function eraseObject(imageId, objectDescription, options = {}) {
-    const project = state.getActiveProject();
+    const initialProjectId = state.activeProjectId;
+    const project = state.projects[initialProjectId];
     const img = project?.images.find(i => i.id === imageId);
     if (!img) return;
 
-    state.setLoading(true, `Erasing "${objectDescription}"…`);
+    state.setLoading(true, `Erasing "${objectDescription}"…`, initialProjectId);
     try {
         const result = await api.eraseByText(img.base64, objectDescription, { signal: options.signal });
         const thumbnail = await createThumbnail(result.base64, 200);
@@ -151,13 +159,14 @@ export async function eraseObject(imageId, objectDescription, options = {}) {
             `Erase object: ${objectDescription}`,
             'edit',
             generateUUID(),
-            img.id
+            img.id,
+            initialProjectId
         );
         showToast(`"${objectDescription}" erased!`);
     } catch (err) {
         console.error('Erase object error:', err);
         state.setError('Erase Object failed: ' + err.message);
     } finally {
-        state.setLoading(false);
+        state.setLoading(false, null, initialProjectId);
     }
 }
