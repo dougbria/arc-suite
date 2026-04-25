@@ -143,22 +143,27 @@ TEMPLATE.innerHTML = `
 </style>
 <header class="app-header">
   <div class="header-left">
-    <h1 class="app-title">Bria<span class="title-accent">Arc</span></h1>
+    <h1 class="app-title">Bria<span class="title-accent">Arc</span><span id="app-module-name" class="title-module hidden" style="font-weight: 400; color: var(--text-muted);"> — Render</span></h1>
   </div>
-  <div class="header-center" id="app-modes-container">
-    <div class="app-modes">
-      <span class="app-mode active" data-mode="render">Render</span>
-      <span class="app-mode" data-mode="drama">Drama</span>
-    </div>
-  </div>
-  <div class="header-right">
-    <div class="project-selector">
-      <select id="project-select" title="Switch project">
+  <div class="header-center">
+    <div class="project-selector" style="background: transparent; border: none; padding: 0;">
+      <select id="project-select" title="Switch project" style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
         <option value="">— No Project —</option>
       </select>
       <button id="new-project-btn" class="icon-btn" title="New Project">＋</button>
       <button id="delete-project-btn" class="icon-btn danger" title="Delete Project">✕</button>
     </div>
+  </div>
+  <div class="header-right">
+    <div class="header-center" id="app-modes-container">
+      <div class="app-modes">
+        <span class="app-mode active" data-mode="render">Render</span>
+        <span class="app-mode" data-mode="drama">Drama</span>
+      </div>
+    </div>
+
+    <button id="gallery-toggle-btn" class="icon-btn" title="Toggle Gallery" style="font-size: 11px; padding: 4px 8px; width: auto; height: auto;">Gallery</button>
+    <button id="vgl-toggle-btn" class="icon-btn" title="Toggle VGL Inspector" style="font-size: 11px; padding: 4px 8px; width: auto; height: auto;">VGL Inspector</button>
     
     <div class="header-divider" style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 8px;"></div>
     
@@ -195,7 +200,12 @@ export class ArcToolbar extends HTMLElement {
         
         // Filter visible apps based on active-app attribute
         const activeApp = this.getAttribute('active-app');
-        if (activeApp) {
+        if (activeApp === 'render') {
+            const modName = this.shadowRoot.getElementById('app-module-name');
+            if (modName) modName.classList.remove('hidden');
+            const modesCont = this.shadowRoot.getElementById('app-modes-container');
+            if (modesCont) modesCont.classList.add('hidden');
+        } else if (activeApp) {
             const modes = this.shadowRoot.querySelectorAll('.app-mode');
             modes.forEach(mode => {
                 if (mode.dataset.mode === activeApp) {
@@ -240,6 +250,20 @@ export class ArcToolbar extends HTMLElement {
         this.settingsBtn.addEventListener('click', () => {
             this.dispatchEvent(new CustomEvent('action', { detail: { type: 'open-settings' }}));
         });
+        
+        const galleryBtn = this.shadowRoot.getElementById('gallery-toggle-btn');
+        if (galleryBtn) {
+            galleryBtn.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('action', { detail: { type: 'toggle-gallery-sidebar' }}));
+            });
+        }
+        
+        const vglBtn = this.shadowRoot.getElementById('vgl-toggle-btn');
+        if (vglBtn) {
+            vglBtn.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('action', { detail: { type: 'toggle-vgl-sidebar' }}));
+            });
+        }
 
         this.storageIndicatorBtn.addEventListener('click', () => {
             this.dispatchEvent(new CustomEvent('action', { detail: { type: 'change-storage' }}));

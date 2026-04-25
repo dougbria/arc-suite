@@ -383,13 +383,17 @@ function renderBatch(batch) {
     if (batch.images.length > 0 && batch.images[0].version != null) {
         const vNum = String(batch.images[0].version).padStart(3, '0');
         const vSuf = batch.images[0].versionSuffix || '';
-        batchVersionStr = `<span class="batch-version" style="margin-left: 8px; color: var(--text-muted); font-size: 11px; font-weight: 500; font-family: monospace;">v${vNum}${vSuf}</span>`;
+        batchVersionStr = `v${vNum}${vSuf}`;
     }
 
     const hasStarred = batch.images.some(img => img.isStarred);
     const starIndicator = hasStarred ? '<span style="color: var(--warning); margin-left: 6px; font-size: 14px;">★</span>' : '';
     const isCollapsed = collapsedGroups.has(batch.batchId);
     const collapseText = isCollapsed ? '▶' : '▼';
+    
+    let actionStr = (batch.mode || 'generate').toUpperCase();
+    if (actionStr === 'BLEND') actionStr = 'SYNTHESIZE';
+    const headerTitle = `${batchVersionStr ? '<span style="color:var(--text-primary);font-weight:600;font-family:monospace;">' + batchVersionStr + '</span> &middot; ' : ''}<span style="color:var(--text-muted);">${actionStr}</span>`;
 
     return `
     <div class="batch-group ${isCollapsed ? 'collapsed' : ''}" data-batch-id="${batch.batchId}">
@@ -397,8 +401,7 @@ function renderBatch(batch) {
         <div class="batch-top">
             <div style="display: flex; align-items: center; cursor: pointer; flex: 1;" class="batch-collapse-toggle" data-batch-id="${batch.batchId}">
                 <span style="font-size: 10px; margin-right: 6px; width: 12px; text-align: center; color: var(--text-muted);">${collapseText}</span>
-                <div class="batch-mode-badge ${batch.mode || 'generate'}">${(batch.mode || 'generate').toUpperCase()}</div>
-                ${batchVersionStr}
+                <div style="font-size: 12px; font-family: var(--font-stack);">${headerTitle}</div>
                 ${starIndicator}
             </div>
             <div class="batch-meta">
@@ -409,7 +412,7 @@ function renderBatch(batch) {
         <input type="text" class="batch-note-input" placeholder="Batch instructions/notes…" 
                value="${noteValue.replace(/"/g, '&quot;')}" 
                data-batch-id="${batch.batchId}"
-               style="display: ${isCollapsed ? 'none' : 'block'};" />
+               style="display: ${isCollapsed ? 'none' : 'block'}; margin-top: 6px;" />
       </div>
       <div class="batch-grid" style="display: ${isCollapsed ? 'none' : 'grid'};">
         ${thumbnails}

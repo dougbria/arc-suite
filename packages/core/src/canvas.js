@@ -63,6 +63,74 @@ const CANVAS_HTML = `
       <div style="flex:1; display:flex; flex-direction:column; min-width:0; position:relative;">
         
         <div class="viewer-wrapper" id="viewer-wrapper" style="flex:1; position:relative; overflow:hidden;">
+          
+          <!-- Left Vertical Toolbar (Modes & Actions) -->
+          <div id="canvas-left-toolbar" class="floating-toolbar-vertical" style="display:flex; flex-direction:column; width: 68px; padding: 12px 6px;">
+            <div class="toolbar-section-header">MODES</div>
+            <div class="toolbar-modes" style="display:flex; flex-direction:column; gap:6px;">
+              <button class="toolbar-mode-btn active" data-mode="view" title="View (V)">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></span><span class="label">View</span>
+              </button>
+              <button class="toolbar-mode-btn" data-mode="layout" title="Layout (L)">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="3" y="3" width="8" height="8"></rect></svg></span><span class="label">Layout</span>
+              </button>
+              <button class="toolbar-mode-btn" data-mode="mask" title="Mask (M)">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg></span><span class="label">Mask</span>
+              </button>
+              <button class="toolbar-mode-btn" data-mode="expand" title="Expand (E)">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg></span><span class="label">Expand</span>
+              </button>
+              <button class="toolbar-mode-btn" data-mode="compare" title="Compare">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.828l-6.536-6.536"></path><path d="M12 22v-8.3a4 4 0 0 1 1.172-2.828l6.536-6.536"></path></svg></span><span class="label">Compare</span>
+              </button>
+            </div>
+            
+            <div class="toolbar-separator" style="margin: 8px 0;"></div>
+            
+            <div class="toolbar-section-header">TOOLS</div>
+            <div class="toolbar-actions" style="display:flex; flex-direction:column; gap:6px;">
+              <button class="toolbar-action-btn" data-action="upscale-enhance-menu" title="Upscale & Enhance">
+                <span class="icon">✨</span><span class="label">Enhance</span>
+              </button>
+              <button class="toolbar-action-btn" data-action="remove-bg" title="Remove Background">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M4.93 4.93l14.14 14.14"></path></svg></span><span class="label">Rem BG</span>
+              </button>
+              <button class="toolbar-action-btn" data-action="erase-menu" title="Erase Object">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16C2.5 15.5 2.5 14.5 3 14L13 4C13.5 3.5 14.5 3.5 15 4L20 9C20.5 9.5 20.5 10.5 20 11L11 20H20V20Z"></path><path d="M17 14L7 14"></path></svg></span><span class="label">Erase</span>
+              </button>
+              <button class="toolbar-action-btn" data-action="copy-object-menu" title="Copy Object">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span><span class="label">Copy Obj</span>
+              </button>
+              <button class="toolbar-action-btn" data-action="copy-background" title="Copy Background">
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg></span><span class="label">Copy BG</span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Top Horizontal Toolbar (Context Settings) -->
+          <div id="canvas-top-toolbar" class="floating-toolbar-horizontal" style="display:none;">
+            <div id="toolbar-mask-controls" class="toolbar-context-controls hidden" style="display: flex; align-items: center; gap: 8px;">
+              <label style="margin: 0;">Brush Size:</label>
+              <input type="range" id="brush-size-slider" min="5" max="150" value="40" style="margin: 0;" />
+              <button id="clear-mask-btn" class="btn btn-sm" title="Reset Mask" style="margin: 0;">⎚ Reset</button>
+              <span class="toolbar-hint" style="margin-left: 8px; opacity: 0.8; font-size: 11px;">💡 Paint a mask to use with Edit. (Hold Alt/Opt to Erase)</span>
+            </div>
+            
+            <div id="toolbar-expand-controls" class="toolbar-context-controls hidden">
+              <button class="btn btn-sm btn-primary expand-ratio-btn" data-ratio="free">Freeform</button>
+              <button class="btn btn-sm expand-ratio-btn" data-ratio="1:1">1:1</button>
+              <button class="btn btn-sm expand-ratio-btn" data-ratio="16:9">16:9</button>
+              <button class="btn btn-sm expand-ratio-btn" data-ratio="9:16">9:16</button>
+              <button class="btn btn-sm expand-ratio-btn" data-ratio="4:3">4:3</button>
+              <button class="btn btn-sm expand-ratio-btn" data-ratio="3:4">3:4</button>
+              <button id="reset-expand-btn" class="btn btn-sm" title="Reset Box" style="margin-left:0.5rem;">⎚ Reset</button>
+            </div>
+            
+            <div id="toolbar-layout-controls" class="toolbar-context-controls hidden">
+              <span class="toolbar-hint" style="opacity: 0.8; font-size: 11px;">💡 Click on images in the gallery to add to the layout to synthesize multiple images.</span>
+            </div>
+          </div>
+
           <!-- Master Container for transforms (pan/zoom) -->
           <div id="canvas-transform-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; transform-origin: 0 0;">
             <img id="main-image" class="main-image" alt="Featured image" />
@@ -95,29 +163,32 @@ const CANVAS_HTML = `
 
         </div>
 
-        <!-- Image info bar -->
-        <div id="image-info-bar" class="image-info-bar" style="pointer-events:auto;">
-          <div class="info-main">
-            <span id="info-seed" class="info-seed" title="Click to copy seed">Seed: —</span>
-            <span id="info-version" class="info-version"></span>
-            <span id="info-prompt" class="info-prompt" title="Click to copy prompt">No prompt</span>
-            <div class="zoom-controls">
-              <span id="zoom-indicator" class="zoom-indicator">Fit</span>
-              <button id="zoom-fit-btn" class="zoom-btn zoom-btn-active" title="Fit (F)">Fit</button>
-              <button id="zoom-100-btn" class="zoom-btn" title="100% (H)">100%</button>
-            </div>
+        <!-- Floating Bottom Toolbars -->
+        <div id="canvas-bottom-left-toolbar" class="floating-toolbar-horizontal floating-bottom-chip" style="left: 80px;">
+          <span id="info-action-type" class="chip-text chip-highlight">Generate</span>
+          <span class="chip-dot">•</span>
+          <span id="info-version" class="chip-text"></span>
+          <span class="chip-dot">•</span>
+          <span id="info-seed" class="chip-text" title="Click to copy seed"></span>
+          <span class="chip-dot">•</span>
+          <span id="info-resolution" class="chip-text chip-muted"></span>
+          <span id="info-prompt" class="info-prompt" title="Click to copy prompt" style="display:none;"></span>
+          <div id="canvas-info-actions-hook" style="display:inline-flex; gap:0.5rem;"></div>
+        </div>
+
+        <div id="canvas-bottom-right-toolbar" class="floating-toolbar-horizontal floating-bottom-chip" style="right: 16px; left: auto; transform: none;">
+          <div class="zoom-controls" style="display: flex; gap: 4px; align-items: center;">
+            <span id="zoom-indicator" class="chip-text">Fit</span>
+            <button id="zoom-fit-btn" class="zoom-btn zoom-btn-active" title="Fit (F)">Fit</button>
+            <button id="zoom-100-btn" class="zoom-btn" title="100% (H)">100%</button>
           </div>
-          <div class="info-actions">
-            <!-- Hooks container for custom buttons like "Approve KF" -->
-            <div id="canvas-info-actions-hook" style="display:inline-flex; gap:0.5rem; margin-right:0.5rem;"></div>
-            <div class="gallery-nav" id="gallery-nav" style="display:flex; align-items:center;">
-              <button id="nav-jump-top-parent" class="nav-btn nav-btn-outer" title="Jump to oldest ancestor (Shift+Cmd+Up)">⇈</button>
-              <button id="nav-jump-parent" class="nav-btn nav-btn-outer" title="Jump to parent (Shift+Up)">↑</button>
-              <button id="nav-prev" class="nav-btn nav-btn-inner" title="Prev">‹</button>
-              <button id="nav-next" class="nav-btn nav-btn-inner" title="Next">›</button>
-              <button id="nav-jump-first-child" class="nav-btn nav-btn-outer" title="Jump to first child (Shift+Down)">↓</button>
-              <button id="nav-jump-last-child" class="nav-btn nav-btn-outer" title="Jump to newest child (Shift+Cmd+Down)">⇊</button>
-            </div>
+          <div class="gallery-nav" id="gallery-nav" style="display:flex; align-items:center;">
+            <button id="nav-jump-top-parent" class="nav-btn nav-btn-outer" title="Jump to oldest ancestor (Shift+Cmd+Up)">⇈</button>
+            <button id="nav-jump-parent" class="nav-btn nav-btn-outer" title="Jump to parent (Shift+Up)">↑</button>
+            <button id="nav-prev" class="nav-btn nav-btn-inner" title="Prev">‹</button>
+            <button id="nav-next" class="nav-btn nav-btn-inner" title="Next">›</button>
+            <button id="nav-jump-first-child" class="nav-btn nav-btn-outer" title="Jump to first child (Shift+Down)">↓</button>
+            <button id="nav-jump-last-child" class="nav-btn nav-btn-outer" title="Jump to newest child (Shift+Cmd+Down)">⇊</button>
           </div>
         </div>
       </div>
@@ -175,9 +246,11 @@ export function initCanvas(mountPointId = null) {
     elements.infoVersion = document.getElementById('info-version');
     
     // Tools
-    elements.canvasToolbar = document.getElementById('canvas-toolbar');
+    elements.canvasLeftToolbar = document.getElementById('canvas-left-toolbar');
+    elements.canvasTopToolbar = document.getElementById('canvas-top-toolbar');
     elements.maskControls = document.getElementById('toolbar-mask-controls');
     elements.expandControls = document.getElementById('toolbar-expand-controls');
+    elements.layoutControls = document.getElementById('toolbar-layout-controls');
     elements.maskCanvas = document.getElementById('mask-canvas');
     elements.expandBox = document.getElementById('expand-box');
     elements.brushSlider = document.getElementById('brush-size-slider');
@@ -301,55 +374,8 @@ function initCanvasContextMenu() {
         if (!btn) return;
 
         const action = btn.dataset.canvasAction;
-        const imageId = state.featuredImageId;
-        if (!imageId) return;
-
         hideCanvasContextMenu();
-
-        const modOpts = {
-            modContent: document.getElementById('mod-content-toggle')?.checked,
-            modOutput:  document.getElementById('mod-output-toggle')?.checked,
-            ipSignal:   document.getElementById('ip-signal-toggle')?.checked
-        };
-
-        const img = state.getFeaturedImage();
-        let sp = null;
-        if (img?.structured_prompt) {
-            try { sp = typeof img.structured_prompt === 'string' ? JSON.parse(img.structured_prompt) : img.structured_prompt; } catch {}
-        }
-
-        switch (action) {
-            case 'enhance':
-                enhanceImage(imageId, modOpts);
-                break;
-            case 'increase-resolution': {
-                const scale = parseInt(btn.dataset.scale, 10) || 2;
-                increaseResolution(imageId, scale);
-                break;
-            }
-            case 'remove-background':
-                removeBackground(imageId);
-                break;
-            case 'erase': {
-                const desc = btn.dataset.desc;
-                if (desc) eraseObject(imageId, desc);
-                break;
-            }
-            case 'compare': {
-                triggerCompareAuto();
-                break;
-            }
-            case 'copy-object': {
-                const json = btn.dataset.json;
-                if (json) copyToClipboard(json, 'Object copied!');
-                break;
-            }
-            case 'copy-background': {
-                const bg = sp?.background_setting;
-                if (bg) copyToClipboard(bg, 'Background copied!');
-                break;
-            }
-        }
+        executeCanvasAction(action, btn);
     });
 
     // Close on outside click or Escape
@@ -362,6 +388,77 @@ function initCanvasContextMenu() {
         if (e.key === 'Escape') hideCanvasContextMenu();
     });
 
+}
+
+function executeCanvasAction(action, btnElement) {
+    const imageId = state.featuredImageId;
+    if (!imageId) return;
+
+    const modOpts = {
+        modContent: document.getElementById('mod-content-toggle')?.checked,
+        modOutput:  document.getElementById('mod-output-toggle')?.checked,
+        ipSignal:   document.getElementById('ip-signal-toggle')?.checked
+    };
+
+    const img = state.getFeaturedImage();
+    let sp = null;
+    if (img?.structured_prompt) {
+        try { sp = typeof img.structured_prompt === 'string' ? JSON.parse(img.structured_prompt) : img.structured_prompt; } catch {}
+    }
+
+    switch (action) {
+        case 'upscale-enhance-menu': {
+            const rect = btnElement ? btnElement.getBoundingClientRect() : { right: 0, top: 0 };
+            showCanvasContextMenu({ clientX: rect.right + 10, clientY: rect.top }, 'enhance-menu');
+            break;
+        }
+        case 'enhance':
+            enhanceImage(imageId, modOpts);
+            break;
+        case 'increase-resolution': {
+            const scale = btnElement ? (parseInt(btnElement.dataset.scale, 10) || null) : null;
+            if (scale) increaseResolution(imageId, scale);
+            break;
+        }
+        case 'remove-bg':
+        case 'remove-background':
+            removeBackground(imageId);
+            break;
+        case 'erase-menu':
+        case 'erase': {
+            const desc = btnElement ? btnElement.dataset.desc : null;
+            if (desc) {
+                eraseObject(imageId, desc);
+            } else {
+                const rect = btnElement ? btnElement.getBoundingClientRect() : { right: 0, top: 0 };
+                showCanvasContextMenu({ clientX: rect.right + 10, clientY: rect.top }, 'erase-menu');
+            }
+            break;
+        }
+        case 'compare': {
+            triggerCompareAuto();
+            break;
+        }
+        case 'copy-object-menu':
+        case 'more-menu':
+        case 'copy-object': {
+            const json = btnElement ? btnElement.dataset.json : null;
+            if (json) {
+                copyToClipboard(json, 'Object copied!');
+            } else {
+                const rect = btnElement ? btnElement.getBoundingClientRect() : { right: 0, top: 0 };
+                showCanvasContextMenu({ clientX: rect.right + 10, clientY: rect.top }, 'copy-object-menu');
+            }
+            break;
+        }
+        case 'copy-background':
+        case 'copy-bg': {
+            const bg = sp?.background_setting;
+            if (bg) copyToClipboard(bg, 'Background copied!');
+            else showToast("No background to copy.");
+            break;
+        }
+    }
 }
 
 function triggerCompareAuto() {
@@ -400,8 +497,21 @@ function objectShortLabel(obj) {
     return label.length > 45 ? label.slice(0, 42) + '…' : label;
 }
 
-function showCanvasContextMenu(e) {
+function showCanvasContextMenu(e, mode = null) {
     if (!canvasCtxMenu) return;
+
+    if (mode) {
+        canvasCtxMenu.setAttribute('data-mode', mode);
+        const items = canvasCtxMenu.querySelectorAll('.context-submenu-item');
+        items.forEach(i => i.classList.remove('active-submenu-item'));
+        if (mode === 'enhance-menu') document.getElementById('canvas-ctx-enhance-item')?.classList.add('active-submenu-item');
+        if (mode === 'erase-menu') document.getElementById('canvas-ctx-erase-item')?.classList.add('active-submenu-item');
+        if (mode === 'copy-object-menu') document.getElementById('canvas-ctx-copy-item')?.classList.add('active-submenu-item');
+    } else {
+        canvasCtxMenu.removeAttribute('data-mode');
+        const items = canvasCtxMenu.querySelectorAll('.context-submenu-item');
+        items.forEach(i => i.classList.remove('active-submenu-item'));
+    }
 
     // Build the Erase Object submenu from VGL objects
     const img = state.getFeaturedImage();
@@ -488,11 +598,20 @@ function hideCanvasContextMenu() {
 // ============================================================
 
 function initTools() {
-    const btns = elements.canvasToolbar?.querySelectorAll('.toolbar-mode-btn');
+    const btns = elements.canvasLeftToolbar?.querySelectorAll('.toolbar-mode-btn');
     if (btns) {
         btns.forEach(btn => btn.addEventListener('click', () => {
             const mode = btn.dataset.mode;
             state.setCanvasMode(mode);
+        }));
+    }
+
+    const actionBtns = elements.canvasLeftToolbar?.querySelectorAll('.toolbar-action-btn');
+    if (actionBtns) {
+        actionBtns.forEach(btn => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const action = btn.dataset.action;
+            executeCanvasAction(action, btn);
         }));
     }
 
@@ -508,13 +627,19 @@ function initTools() {
 
 function updateToolModes() {
     const mode = state.canvasMode;
-    const btns = elements.canvasToolbar?.querySelectorAll('.toolbar-mode-btn');
+    const btns = elements.canvasLeftToolbar?.querySelectorAll('.toolbar-mode-btn');
     btns?.forEach(b => {
         b.classList.toggle('active', b.dataset.mode === mode);
     });
 
     elements.maskControls?.classList.toggle('hidden', mode !== 'mask');
     elements.expandControls?.classList.toggle('hidden', mode !== 'expand');
+    elements.layoutControls?.classList.toggle('hidden', mode !== 'layout');
+    
+    if (elements.canvasTopToolbar) {
+        const needsTopToolbar = mode === 'mask' || mode === 'expand' || mode === 'layout';
+        elements.canvasTopToolbar.style.display = needsTopToolbar ? 'flex' : 'none';
+    }
 
     elements.maskCanvas.style.opacity = (mode === 'mask') ? '0.7' : '0';
     elements.maskCanvas.style.pointerEvents = (mode === 'mask') ? 'auto' : 'none';
@@ -560,7 +685,9 @@ function setupToolCanvases(imgRecord) {
     const img = elements.mainImage;
     if (!img) return;
 
-    elements.canvasToolbar.classList.remove('hidden');
+    if (elements.canvasLeftToolbar) {
+        elements.canvasLeftToolbar.style.display = 'flex';
+    }
 
     function syncDimensions() {
         elements.maskCanvas.width = img.naturalWidth || 1024;
@@ -876,8 +1003,8 @@ export function zoomToFit() {
     const wrapH = wrapper.clientHeight;
     let visibleH = wrapH;
     
-    // If prompt bar exists and is open, calculate visible area above it
-    if (promptBar && !promptBar.classList.contains('collapsed')) {
+    // If prompt bar exists, calculate visible area above it
+    if (promptBar) {
         const wrapRect = wrapper.getBoundingClientRect();
         const promptRect = promptBar.getBoundingClientRect();
         
@@ -886,6 +1013,11 @@ export function zoomToFit() {
         if (spaceAbovePrompt > 100 && spaceAbovePrompt < visibleH) {
             visibleH = spaceAbovePrompt;
         }
+        
+        // Dynamically position bottom chips above the drawer
+        const chips = document.querySelectorAll('.floating-bottom-chip');
+        const offset = Math.max(56, window.innerHeight - promptRect.top + 16);
+        chips.forEach(c => c.style.bottom = `${offset}px`);
     }
 
     const naturalW = img.naturalWidth || 512;
@@ -1109,10 +1241,41 @@ function updateFeaturedImage() {
     }
 
     elements.mainImage.src = img.base64;
-    elements.infoSeed.textContent = `Seed: ${img.seed}`;
+    
+    // Set seed and version
+    elements.infoSeed.textContent = `Seed: ${img.seed || 'Auto'}`;
     if (elements.infoVersion) {
         elements.infoVersion.textContent = img.version != null ? `v${String(img.version).padStart(3, '0')}` : '';
     }
+
+    // Heuristically set action type
+    const infoActionType = document.getElementById('info-action-type');
+    if (infoActionType) {
+        let actionStr = 'Generate';
+        if (img.parentImageId) actionStr = 'Refine';
+        // if we detect JSON that has 'expand', 'mask', etc we could specify.
+        if (img.structured_prompt && typeof img.structured_prompt === 'string') {
+            if (img.structured_prompt.includes('blend')) actionStr = 'Synthesize';
+            if (img.structured_prompt.includes('mask')) actionStr = 'Edit';
+            if (img.structured_prompt.includes('expand')) actionStr = 'Expand';
+        }
+        infoActionType.textContent = actionStr;
+    }
+    
+    // Check if naturalWidth is available, else we might need to wait for load event
+    const infoRes = document.getElementById('info-resolution');
+    if (infoRes) {
+        if (elements.mainImage.complete) {
+            infoRes.textContent = `${elements.mainImage.naturalWidth}x${elements.mainImage.naturalHeight}`;
+        } else {
+            infoRes.textContent = '';
+            elements.mainImage.addEventListener('load', function onImageLoad() {
+                infoRes.textContent = `${this.naturalWidth}x${this.naturalHeight}`;
+                this.removeEventListener('load', onImageLoad);
+            });
+        }
+    }
+
     const displayPrompt = img.prompt ? (img.prompt.length > 200 ? img.prompt.substring(0, 200) + '...' : img.prompt) : '(no prompt)';
     elements.infoPrompt.textContent = displayPrompt;
 

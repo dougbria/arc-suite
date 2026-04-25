@@ -78,12 +78,11 @@ select {
 /* ---------- App Layout (CSS Grid) ---------- */
 #app {
   display: grid;
-  grid-template-rows: auto var(--header-height) 40px 1fr;
+  grid-template-rows: auto var(--header-height) 1fr;
   grid-template-columns: 1fr;
   grid-template-areas:
     "banner"
     "header"
-    "subheader"
     "main";
   height: 100vh;
   width: 100vw;
@@ -887,6 +886,7 @@ select {
 }
 
 #arc-vgl-mount.collapsed,
+#arc-gallery-mount.collapsed,
 .json-sidebar.collapsed {
   width: 0 !important;
   border: 0 !important;
@@ -1450,62 +1450,83 @@ select {
 }
 
 
-/* ---------- Prompt Bar Refinement (Canvas-Contained Dock) ---------- */
+/* ---------- Prompt Bar Refinement (Bottom Drawer) ---------- */
 .prompt-bar {
   position: absolute;
-  bottom: 80px; /* Position above the canvas footer */
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(850px, 95%); /* Narrower to fit within center canvas */
-  background: rgba(13, 13, 17, 0.9); /* Slightly more opaque for readability over images */
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(13, 13, 17, 0.9);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 50;
-  box-shadow: 
-    0 10px 30px rgba(0, 0, 0, 0.6),
-    inset 0 1px 1px rgba(255, 255, 255, 0.05);
-  transition: all var(--transition-slow);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
+  transition: transform var(--transition-slow);
 }
 
-.prompt-bar.collapsed {
-  transform: translateX(-50%) translateY(80px) scale(0.9);
-  opacity: 0;
-  pointer-events: none;
+/* States */
+.drawer-expanded {
+  transform: translateY(0);
 }
 
-.prompt-bar-collapse-btn {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-  width: 40px;
-  height: 12px;
+.drawer-minimized {
+  transform: translateY(calc(100% - 52px)); /* 52px is the height of the handle */
+}
+
+.drawer-expanded .drawer-minimized-strip {
+  display: none !important;
+}
+
+.drawer-minimized-strip {
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  color: var(--text-muted);
   cursor: pointer;
-  z-index: 10;
-  padding: 0;
-  line-height: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  z-index: 60;
 }
 
-.prompt-bar-collapse-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
+.drawer-minimized-strip:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Collapse/Expand button in expanded state */
+.prompt-bar-collapse-btn {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 10;
+  padding: 8px; /* Larger hit area */
+}
+
+.prompt-bar-drag-pill {
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.2s;
+}
+
+.prompt-bar-collapse-btn:hover .prompt-bar-drag-pill,
+.drawer-minimized-strip:hover .prompt-bar-drag-pill {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.drawer-minimized .prompt-bar-collapse-btn {
+  display: none !important;
 }
 
 .prompt-bar-inner {
   max-width: 100%;
   margin: 0;
+  padding: 16px 20px;
 }
 
 .prompt-layout-container {
@@ -2474,11 +2495,6 @@ body.prompt-bar-hidden .info-prompt::before {
 .gallery-nav {
   display: flex;
   align-items: center;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 2px 4px;
 }
 
 .nav-btn {
@@ -2996,6 +3012,28 @@ body.prompt-bar-hidden .info-prompt::before {
   white-space: nowrap;
 }
 
+/* Standalone Submenu Mode: only show the targeted submenu directly inside the main menu container */
+#canvas-context-menu[data-mode] {
+  padding: 0;
+}
+
+#canvas-context-menu[data-mode] > :not(.active-submenu-item) {
+  display: none !important;
+}
+
+#canvas-context-menu[data-mode] .active-submenu-item > .context-submenu-trigger {
+  display: none !important;
+}
+
+#canvas-context-menu[data-mode] .active-submenu-item > .context-submenu {
+  display: block !important;
+  position: static;
+  box-shadow: none;
+  border: none;
+  background: transparent;
+  min-width: 160px;
+}
+
 .context-submenu button:hover {
   background: var(--bg-hover);
   color: var(--text-accent);
@@ -3148,6 +3186,7 @@ body.prompt-bar-hidden .info-prompt::before {
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   transition: all 0.2s ease;
+  margin-bottom: 8px;
 }
 .card-group:hover {
   border-color: rgba(255, 255, 255, 0.15);
@@ -3180,10 +3219,11 @@ body.prompt-bar-hidden .info-prompt::before {
 }
 
 .card-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-accent, #2dd4bf);
-  text-transform: capitalize;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .card-title-array {
@@ -3195,8 +3235,8 @@ body.prompt-bar-hidden .info-prompt::before {
 .card-children {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 10px 10px 10px;
+  gap: 8px;
+  padding: 8px 12px 12px 12px;
 }
 
 .card-leaf {
@@ -3232,14 +3272,14 @@ body.prompt-bar-hidden .info-prompt::before {
   box-sizing: border-box;
   display: block;
   width: 100%;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  color: #a8d8a8;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
   font-family: inherit;
   font-size: 13px;
   line-height: 1.5;
-  padding: 6px;
+  padding: 8px;
   margin: 0;
   resize: none;
   overflow: hidden;
@@ -3262,29 +3302,178 @@ body.prompt-bar-hidden .info-prompt::before {
    CANVAS POWER TOOLS
    ============================================================ */
 
-.canvas-toolbar {
-  /* Inherits flex layout from module-toolbar-left */
-  transition: opacity 0.2s;
+.floating-toolbar-vertical {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  transform: none;
+  background: rgba(13, 13, 17, 0.9);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  transition: opacity 0.2s, transform 0.2s;
+  max-height: calc(100% - 100px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.floating-toolbar-vertical::-webkit-scrollbar {
+  display: none;
 }
 
-.canvas-toolbar.hidden {
+.floating-toolbar-horizontal {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(13, 13, 17, 0.9);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  z-index: 40;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.floating-bottom-chip {
+  top: auto;
+  bottom: 56px;
+  height: 40px;
+  border-radius: 20px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 30;
+  transform: none !important;
+  transition: bottom var(--transition-slow), opacity 0.2s;
+}
+
+.chip-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.chip-muted {
+  color: var(--text-muted);
+}
+
+.chip-highlight {
+  color: var(--accent-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chip-dot {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 10px;
+}
+
+.floating-toolbar-vertical.hidden, .floating-toolbar-horizontal.hidden {
   display: none !important;
 }
 
-.toolbar-mode-btn {
+/* UI Focus States (Tab toggles) */
+/* State 1: Focus Canvas */
+body.ui-focus .floating-toolbar-vertical,
+body.ui-focus .floating-toolbar-horizontal,
+body.ui-focus .floating-bottom-chip {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Note: In State 1, Gallery and VGL remain visible, as well as the Prompt Bar and Header. */
+
+/* State 2: Presentation (Max Canvas) */
+body.ui-presentation #arc-gallery-mount,
+body.ui-presentation #arc-vgl-mount,
+body.ui-presentation .resizer {
+  display: none !important;
+}
+
+body.ui-presentation #app {
+  grid-template-columns: 0 1fr 0 !important;
+}
+
+.toolbar-separator {
+  width: 100%;
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.toolbar-action-btn {
   background: transparent;
   border-color: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
-.toolbar-mode-btn:hover {
+
+.toolbar-action-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toolbar-section-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.toolbar-mode-btn, .toolbar-action-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  width: 100%;
+  min-height: 36px;
+  gap: 0px;
+  cursor: pointer;
+}
+
+.toolbar-mode-btn .icon, .toolbar-action-btn .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.toolbar-mode-btn .label, .toolbar-action-btn .label {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.toolbar-mode-btn:hover, .toolbar-action-btn:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);
 }
-.toolbar-mode-btn.active {
-  background: var(--accent-primary);
+
+.toolbar-mode-btn.active, .toolbar-action-btn.active {
+  background: rgba(124, 58, 237, 0.15);
   color: white;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.4), inset 0 0 8px rgba(124, 58, 237, 0.2);
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
 }
 

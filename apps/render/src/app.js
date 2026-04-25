@@ -234,7 +234,22 @@ function initUI() {
         }
     });
 
-    promptBarCollapseBtn?.addEventListener('click', togglePromptBar);
+    promptBarCollapseBtn?.addEventListener('click', () => setDrawerState('minimized'));
+    document.getElementById('drawer-minimized-strip')?.addEventListener('click', (e) => {
+        // Prevent expanding if they clicked a specific inline button
+        if (!e.target.closest('.btn')) {
+            setDrawerState('expanded');
+        }
+    });
+    
+    document.getElementById('minimized-expand-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btnExpand && !btnExpand.disabled) btnExpand.click();
+    });
+    document.getElementById('minimized-synthesize-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btnSynthesize && !btnSynthesize.disabled) btnSynthesize.click();
+    });
     promptExpandBtn?.addEventListener('click', openPromptExpand);
     promptExpandDone?.addEventListener('click', commitPromptExpand);
     promptExpandCancel?.addEventListener('click', () => promptExpandDialog.close());
@@ -311,6 +326,9 @@ function initUI() {
                 break;
             case 'change-storage':
                 await state.setupStorage();
+                break;
+            case 'toggle-gallery-sidebar':
+                toggleGallerySidebar();
                 break;
             case 'toggle-vgl-sidebar':
                 toggleJsonSidebar();
@@ -401,7 +419,7 @@ function initUI() {
 
     infoPrompt?.addEventListener('click', () => {
         if (document.body.classList.contains('prompt-bar-hidden')) {
-            togglePromptBar();
+            setDrawerState('expanded');
         } else {
             const img = state.getFeaturedImage();
             if (img) copyToClipboard(img.prompt || '', 'Prompt copied!');
@@ -459,15 +477,46 @@ function initUI() {
     autoExpandPrompt();
 }
 
-function togglePromptBar() {
-    if (promptBar) {
-        const isCollapsed = promptBar.classList.toggle('collapsed');
-        document.body.classList.toggle('prompt-bar-hidden', isCollapsed);
-        if (isCollapsed) {
-            // Also close advanced settings if they were open
-            const advanced = promptBar.querySelector('.prompt-advanced-details');
-            if (advanced) advanced.open = false;
+function setDrawerState(state) {
+    if (!promptBar) return;
+    promptBar.classList.remove('drawer-expanded', 'drawer-minimized');
+    promptBar.classList.add(`drawer-${state}`);
+    
+    // Maintain backward compatibility class for body
+    const isHidden = state === 'minimized';
+    document.body.classList.toggle('prompt-bar-hidden', isHidden);
+    
+    if (state !== 'expanded') {
+        const advanced = promptBar.querySelector('.prompt-advanced-details');
+        if (advanced) advanced.open = false;
+    }
+
+    // Give the CSS transition (300ms) time to finish, then resize canvas
+    setTimeout(() => {
+        if (typeof Canvas !== 'undefined' && Canvas.zoomToFit) {
+            Canvas.zoomToFit();
         }
+    }, 320);
+}
+
+function toggleGallerySidebar() {
+    const galleryMount = document.getElementById('arc-gallery-mount');
+    const resizer = document.getElementById('resizer-gallery');
+    if (galleryMount) {
+        const isCollapsed = galleryMount.classList.toggle('collapsed');
+        if (resizer) resizer.style.display = isCollapsed ? 'none' : 'block';
+        window.dispatchEvent(new Event('resize'));
+    }
+}
+
+function toggleJsonSidebar() {
+    const vglMount = document.getElementById('arc-vgl-mount');
+    const resizer = document.getElementById('resizer-json');
+    if (vglMount) {
+        const isCollapsed = vglMount.classList.toggle('collapsed');
+        if (resizer) resizer.style.display = isCollapsed ? 'none' : 'block';
+        // Let the gallery resizer know if it needs to update or just let flexbox handle it
+        window.dispatchEvent(new Event('resize'));
     }
 }
 
@@ -694,9 +743,27 @@ function commitPromptExpand() {
 
 
 document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input
+    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        togglePromptBar();
+        const isExpanded = promptBar && promptBar.classList.contains('drawer-expanded');
+        setDrawerState(isExpanded ? 'collapsed' : 'expanded');
+    }
+
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        
+        // Simple toggle: default (0) <-> focus (1)
+        let uiState = parseInt(document.body.dataset.uiState || '0');
+        uiState = uiState === 0 ? 1 : 0;
+        document.body.dataset.uiState = uiState;
+        
+        document.body.classList.toggle('ui-focus', uiState === 1);
+        
+        // Tell canvas to refit
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
     }
 });
 
@@ -708,8 +775,18 @@ function updateActionButtonsState() {
     if (!promptInput) return;
     const hasProject = !!state.getActiveProject();
     const hasApiKey = !!state.getApiKey();
-    const hasPrompt = promptInput.value.trim().length > 0;
+    const promptText = promptInput.value.trim();
+    const hasPrompt = promptText.length > 0;
     const hasFeatured = !!state.getFeaturedImage();
+    
+    // Update Drawer Summary UI
+    const sumPrompt = document.getElementById('summary-prompt');
+    const sumRatio = document.getElementById('summary-ratio');
+    const sumSeed = document.getElementById('summary-seed');
+    if (sumPrompt) sumPrompt.textContent = hasPrompt ? promptText : 'No prompt...';
+    if (sumRatio && typeof aspectRatioBtn !== 'undefined' && aspectRatioBtn) sumRatio.textContent = `Ratio: ${aspectRatioBtn.textContent.trim()}`;
+    if (sumSeed && typeof seedInput !== 'undefined' && seedInput) sumSeed.textContent = `Seed: ${seedInput.value || 'Auto'}`;
+
 
     // Project is a hard requirement for UI logic
     if (!hasProject) {
@@ -759,10 +836,11 @@ function updateActionButtonsState() {
     }
 
     const btnSynthesize = document.getElementById('btn-synthesize');
+    let showSynthesize = false;
     if (btnSynthesize) {
         // Show Synthesize button if we are in layout mode OR multiple images are selected
         const hasMultipleSelected = state.selectedImageIds && state.selectedImageIds.size > 1;
-        const showSynthesize = isLayoutMode || hasMultipleSelected;
+        showSynthesize = isLayoutMode || hasMultipleSelected;
         
         btnSynthesize.classList.toggle('hidden', !showSynthesize);
         btnSynthesize.disabled = !showSynthesize;
@@ -774,6 +852,22 @@ function updateActionButtonsState() {
             if (btnExpand) btnExpand.style.display = 'none';
             if (btnLayout) btnLayout.style.display = 'none';
         }
+    }
+
+    // Minimized drawer contextual actions
+    const minExpand = document.getElementById('minimized-expand-btn');
+    const minSynth = document.getElementById('minimized-synthesize-btn');
+    const hasPromptText = hasPrompt; // Local check
+    
+    if (minExpand) {
+        const canExpand = hasFeatured && isExpandMode;
+        minExpand.classList.toggle('hidden', !canExpand);
+        minExpand.disabled = !canExpand || !hasApiKey;
+    }
+    
+    if (minSynth) {
+        minSynth.classList.toggle('hidden', !showSynthesize);
+        minSynth.disabled = !showSynthesize;
     }
 
     // Visual cues only

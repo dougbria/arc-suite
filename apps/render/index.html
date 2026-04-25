@@ -35,40 +35,6 @@
     <!-- ==================== HEADER BAR ==================== -->
     <arc-toolbar id="app-toolbar" active-app="render"></arc-toolbar>
 
-    <!-- ==================== MODULE SUB-HEADER ==================== -->
-    <div class="module-toolbar" style="grid-area: subheader; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 40px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border);">
-      <div id="module-toolbar-left" style="display: flex; gap: 8px; align-items: center; width: 100%;">
-        <div id="canvas-toolbar" class="canvas-toolbar" style="display:flex; gap: 1rem; align-items:center;">
-          <div class="toolbar-modes" style="display:flex; gap: 0.25rem;">
-            <button class="btn btn-sm toolbar-mode-btn active" data-mode="view">✋ View</button>
-            <button class="btn btn-sm toolbar-mode-btn" data-mode="layout">🔲 Layout</button>
-            <button class="btn btn-sm toolbar-mode-btn" data-mode="mask">🖌 Mask</button>
-            <button class="btn btn-sm toolbar-mode-btn" data-mode="expand">📐 Expand</button>
-          </div>
-          
-          <div id="toolbar-mask-controls" class="toolbar-context-controls hidden" style="display:flex; gap: 0.5rem; align-items:center; border-left: 1px solid var(--border); padding-left: 1rem;">
-            <label style="font-size:0.75rem; color:var(--text-secondary); font-weight:600;">Brush Size:</label>
-            <input type="range" id="brush-size-slider" min="5" max="150" value="40" style="width: 100px;" />
-            <button id="clear-mask-btn" class="btn btn-sm" title="Reset Mask">⎚ Reset</button>
-            <span style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; margin-left:0.5rem; white-space:nowrap;">(Hold Alt/Opt to Erase)</span>
-          </div>
-          
-          <div id="toolbar-expand-controls" class="toolbar-context-controls hidden" style="display:flex; gap: 0.5rem; align-items:center; border-left: 1px solid var(--border); padding-left: 1rem;">
-            <button class="btn btn-sm btn-primary expand-ratio-btn" data-ratio="free">Freeform</button>
-            <button class="btn btn-sm expand-ratio-btn" data-ratio="1:1">1:1</button>
-            <button class="btn btn-sm expand-ratio-btn" data-ratio="16:9">16:9</button>
-            <button class="btn btn-sm expand-ratio-btn" data-ratio="9:16">9:16</button>
-            <button class="btn btn-sm expand-ratio-btn" data-ratio="4:3">4:3</button>
-            <button class="btn btn-sm expand-ratio-btn" data-ratio="3:4">3:4</button>
-            <button id="reset-expand-btn" class="btn btn-sm" title="Reset Box" style="margin-left:0.5rem;">⎚ Reset</button>
-          </div>
-        </div>
-      </div>
-      <div id="module-toolbar-right">
-        <button id="json-sidebar-header-toggle" class="btn btn-sm" title="Toggle VGL Inspector" style="font-size: 11px; padding: 4px 8px;">VGL Inspector</button>
-      </div>
-    </div>
-
     <!-- ==================== MAIN CONTENT ==================== -->
     <main class="layout-horizontal">
       <div id="arc-main-mount" style="flex:1; display:flex; flex-direction:row; min-width:0; position:relative; background:var(--bg-base);">
@@ -113,16 +79,15 @@
 
     <!-- Canvas Context Menu (right-click on main image viewer) -->
     <div id="canvas-context-menu" class="context-menu hidden">
-      <button data-canvas-action="enhance">✨ Creative Enhancer</button>
-      <div class="context-submenu-item">
-        <button class="context-submenu-trigger">📐 Increase Resolution ▶</button>
-        <div class="context-submenu">
-          <button data-canvas-action="increase-resolution" data-scale="2">2× Resolution</button>
-          <button data-canvas-action="increase-resolution" data-scale="4">4× Resolution</button>
+      <div class="context-submenu-item" id="canvas-ctx-enhance-item">
+        <button class="context-submenu-trigger">✨ Upscale & Enhance ▶</button>
+        <div class="context-submenu" id="canvas-ctx-enhance-submenu">
+          <button data-canvas-action="enhance">✨ Creative Enhance</button>
+          <button data-canvas-action="increase-resolution" data-scale="2">📐 2× Resolution</button>
+          <button data-canvas-action="increase-resolution" data-scale="4">📐 4× Resolution</button>
         </div>
       </div>
-      <button data-canvas-action="remove-background">🪄 Remove Background</button>
-      <button data-canvas-action="compare">⚖️ Compare</button>
+      <button data-canvas-action="remove-background" id="canvas-ctx-rembg-item">🪄 Remove Background</button>
       <div class="context-submenu-item" id="canvas-ctx-erase-item">
         <button class="context-submenu-trigger">🧹 Erase Object ▶</button>
         <div class="context-submenu" id="canvas-ctx-erase-submenu">

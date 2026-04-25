@@ -22,6 +22,9 @@ export default defineConfig(({ command }) => ({
     }
   },
   server: {
+    fs: {
+      allow: ['../..']
+    },
     // Dev-only proxy: forwards /api → Bria's engine
     // In production, api.js switches API_BASE to the direct URL via import.meta.env.PROD
     proxy: {
